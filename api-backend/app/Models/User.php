@@ -18,13 +18,8 @@ class User extends Authenticatable
      *
      * @var list<string>
      */
-    protected $fillable = [
-        'name',
-        'email',
-        'password',
-        'role',
-        'phone'
-    ];
+    protected $fillable = ['name','email','password','role','phone','company_id','role_status'];
+
 
     /**
      * The attributes that should be hidden for serialization.
@@ -41,11 +36,12 @@ class User extends Authenticatable
      *
      * @return array<string, string>
      */
-    protected function casts(): array
+    protected $casts = ['email_verified_at'=>'datetime','password'=>'hashed'];
+// app/Models/User.php
+    public function company()
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
+        return $this->belongsTo(\App\Models\Company::class);
     }
+    public function roleRequests(){ return $this->hasMany(RoleRequest::class); }
+    public function products(){ return $this->hasMany(Product::class); }
 }

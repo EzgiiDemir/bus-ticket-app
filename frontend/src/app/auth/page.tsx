@@ -4,15 +4,11 @@ import React, { useEffect, useMemo, useState, FormEvent, ChangeEvent } from "rea
 import { useSearchParams } from "next/navigation";
 import { myAppHook } from "../../../context/AppProvider";
 import { Bus, Eye, EyeOff, User2, Shield } from "lucide-react";
+import { BASE } from "./../lib/api";
 
 type Role = "passenger" | "personnel";
-type FormData = {
-    name?: string;
-    email: string;
-    password: string;
-    password_confirmation?: string;
-    role: Role;
-};
+type FormData = { name?:string; email:string; password:string; password_confirmation?:string; role:Role; company_id?: number };
+
 
 export default function Auth() {
     const { login, register, isLoading } = myAppHook() as any;
@@ -32,11 +28,14 @@ export default function Auth() {
         password_confirmation: "",
         role: "passenger",
     });
+    const [companies, setCompanies] = useState<{id:number;name:string;code:string}[]>([]);
+    useEffect(()=>{ fetch(`${BASE}/public/companies`).then(r=>r.json()).then(setCompanies).catch(()=>{}); },[]);
 
-    const onChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const onChange = (e: ChangeEvent<HTMLInputElement|HTMLSelectElement>) => {
         const { name, value } = e.target as any;
-        setFormData((s) => ({ ...s, [name]: value }));
+        setFormData(s => ({ ...s, [name]: name==='company_id' ? Number(value) || undefined : value }));
     };
+
 
     const onSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -49,13 +48,15 @@ export default function Auth() {
             formData.email,
             formData.password,
             formData.password_confirmation ?? "",
-            formData.role
+            formData.role,
+            formData.company_id
         );
+
         setIsLogin(true);
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex items-center">
+        <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex items-center text-indigo-900">
             <div className="container mx-auto px-4">
                 <div className="mx-auto grid max-w-5xl grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="relative hidden lg:block">
@@ -167,6 +168,16 @@ export default function Auth() {
                                             </div>
                                         </div>
                                     </>
+                                )}
+                                {!isLogin && formData.role==='personnel' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-indigo-900 mb-1">Bağlı Olduğunuz Firma</label>
+                                        <select name="company_id" value={formData.company_id ?? ''} onChange={onChange}
+                                                className="w-full rounded-xl border px-3 py-2">
+                                            <option value="">Seçiniz</option>
+                                            {companies.map(c=> <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+                                        </select>
+                                    </div>
                                 )}
 
                                 <div>

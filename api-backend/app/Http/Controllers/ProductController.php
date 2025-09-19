@@ -9,16 +9,20 @@ use Carbon\Carbon;
 
 class ProductController extends Controller
 {
-    // Yolcu: tüm aktif seferler
-    // Personel: sadece kendi seferleri
+    public function __construct()
+    {
+        $this->middleware(['auth:sanctum','personnel.active'])->only(['store','update','destroy']);
+    }
+
     public function index()
     {
-        $user = Auth::user();
+        $u = Auth::user();
 
         $q = Product::query()->latest();
 
-        if ($user && strtolower($user->role) === 'personnel') {
-            $q->where('user_id', $user->id);
+        if ($u && $u->role === 'personnel') {
+            $q->where('user_id', $u->id)
+                ->when($u->company_id, fn($qq) => $qq->where('company_id', $u->company_id));
         } else {
             $q->where('is_active', 1);
         }
@@ -29,11 +33,15 @@ class ProductController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $r)
     {
+        $u = Auth::user();
         $user = Auth::user();
+        if ($user->role !== 'personnel' || !$user->company_id) {
+            return response()->json(['message'=>'Personel ve şirket zorunlu'], 403);
+        }
 
-        $data = $request->validate([
+        $data = $r->validate([
             'trip' => 'required|string|max:255',
             'company_name' => 'required|string|max:255',
             'terminal_from' => 'required|string|max:255',
@@ -45,54 +53,49 @@ class ProductController extends Controller
             'note' => 'nullable|string|max:500',
         ]);
 
-        $data['user_id'] = $user->id;
-        $data['created_by'] = $user->name ?? (string)$user->id;
-        $data['updated_by'] = $user->name ?? (string)$user->id;
+        $data += [
+            'user_id'     => $u->id,
+            'company_id'  => $u->company_id,
+            'created_by'  => $u->name ?? (string) $u->id,
+            'updated_by'  => $u->name ?? (string) $u->id,
+        ];
 
         $data['departure_time'] = Carbon::createFromFormat('Y-m-d\TH:i', $data['departure_time'])->format('Y-m-d H:i:s');
 
         $product = Product::create($data);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Product created',
-            'product' => $product,
-        ], 201);
+        return response()->json(['status' => true, 'message' => 'Product created', 'product' => $product], 201);
     }
 
     public function show($id)
     {
-        $user = Auth::user();
+        $u = Auth::user();
 
-        // Yolcu hepsini görebilsin; personel sadece kendi kaydını
         $q = Product::query()->where('id', $id);
-        if ($user && strtolower($user->role) === 'personnel') {
-            $q->where('user_id', $user->id);
+        if ($u && $u->role === 'personnel') {
+            $q->where('user_id', $u->id)
+                ->when($u->company_id, fn($qq) => $qq->where('company_id', $u->company_id));
         }
+
         $product = $q->first();
+        if (!$product) return response()->json(['status'=>false,'message'=>'Not found'], 404);
 
-        if (!$product) {
-            return response()->json(['status' => false, 'message' => 'Not found'], 404);
-        }
-
-        return response()->json(['status' => true, 'product' => $product]);
+        return response()->json(['status'=>true,'product'=>$product]);
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $r, $id)
     {
-        $user = Auth::user();
+        $u = Auth::user();
 
         $q = Product::query()->where('id', $id);
-        if ($user && strtolower($user->role) === 'personnel') {
-            $q->where('user_id', $user->id);
+        if ($u && $u->role === 'personnel') {
+            $q->where('user_id', $u->id)
+                ->when($u->company_id, fn($qq) => $qq->where('company_id', $u->company_id));
         }
         $product = $q->first();
+        if (!$product) return response()->json(['status'=>false,'message'=>'Not found'], 404);
 
-        if (!$product) {
-            return response()->json(['status' => false, 'message' => 'Not found'], 404);
-        }
-
-        $data = $request->validate([
+        $payload = $r->validate([
             'trip' => 'sometimes|string|max:255',
             'company_name' => 'sometimes|string|max:255',
             'terminal_from' => 'sometimes|string|max:255',
@@ -104,54 +107,43 @@ class ProductController extends Controller
             'note' => 'nullable|string|max:500',
         ]);
 
-        $data['updated_by'] = $user->name ?? (string)$user->id;
-
-        if (isset($data['departure_time']) && $data['departure_time']) {
-            $data['departure_time'] = Carbon::createFromFormat('Y-m-d\TH:i', $data['departure_time'])->format('Y-m-d H:i:s');
+        if (!empty($payload['departure_time'])) {
+            $payload['departure_time'] = Carbon::createFromFormat('Y-m-d\TH:i', $payload['departure_time'])->format('Y-m-d H:i:s');
         }
 
-        $product->update($data);
+        // her güncellemede şirket bağını koru
+        $payload['company_id'] = $u->company_id;
+        $payload['updated_by'] = $u->name ?? (string) $u->id;
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Updated',
-            'product' => $product->refresh(),
-        ]);
+        $product->update($payload);
+
+        return response()->json(['status'=>true,'message'=>'Updated','product'=>$product->refresh()]);
     }
 
     public function destroy($id)
     {
-        $user = Auth::user();
+        $u = Auth::user();
 
         $q = Product::query()->where('id', $id);
-        if ($user && strtolower($user->role) === 'personnel') {
-            $q->where('user_id', $user->id);
+        if ($u && $u->role === 'personnel') {
+            $q->where('user_id', $u->id)
+                ->when($u->company_id, fn($qq) => $qq->where('company_id', $u->company_id));
         }
         $product = $q->first();
-
-        if (!$product) {
-            return response()->json(['status' => false,'message' => 'Not found'], 404);
-        }
+        if (!$product) return response()->json(['status'=>false,'message'=>'Not found'], 404);
 
         $product->delete();
-
-        return response()->json(['status' => true,'message' => 'Deleted']);
+        return response()->json(['status'=>true,'message'=>'Deleted']);
     }
-
 
     public function publicIndex()
     {
         return response()->json([
             'status' => true,
-            'products' => \App\Models\Product::query()
+            'products' => Product::query()
                 ->where('is_active', 1)
                 ->orderBy('departure_time')
-                ->get([
-                    'id','trip','company_name','terminal_from','terminal_to','departure_time','cost','is_active'
-                ]),
+                ->get(['id','trip','company_name','terminal_from','terminal_to','departure_time','cost','is_active']),
         ]);
     }
-
-
-
 }

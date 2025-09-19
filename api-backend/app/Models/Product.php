@@ -12,7 +12,7 @@ class Product extends Model
     protected $fillable = [
         'trip','company_name','terminal_from','terminal_to',
         'departure_time','cost','capacity_reservation','is_active',
-        'note','user_id','created_by','updated_by'
+        'note','user_id','created_by','updated_by','company_id'
     ];
 
     protected $casts = [
@@ -21,8 +21,8 @@ class Product extends Model
         'cost' => 'decimal:2',
     ];
 
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
+    public function user(){ return $this->belongsTo(User::class); }
+    public function company(){ return $this->belongsTo(Company::class); }
+
+
 }

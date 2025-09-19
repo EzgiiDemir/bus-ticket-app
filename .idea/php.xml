@@ -116,6 +116,10 @@
       <path value="$PROJECT_DIR$/api-backend/vendor/sebastian/version" />
       <path value="$PROJECT_DIR$/api-backend/vendor/sebastian/type" />
       <path value="$PROJECT_DIR$/api-backend/vendor/laravel/sanctum" />
+      <path value="$PROJECT_DIR$/api-backend/vendor/psr/cache" />
+      <path value="$PROJECT_DIR$/api-backend/vendor/doctrine/deprecations" />
+      <path value="$PROJECT_DIR$/api-backend/vendor/doctrine/dbal" />
     </include_path>
   </component>
+  <component name="PhpProjectSharedConfiguration" php_language_level="8.2" />
 </project>

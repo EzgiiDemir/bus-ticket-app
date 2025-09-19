@@ -5,8 +5,15 @@ import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { toast } from "react-hot-toast";
 
-type Role = "passenger" | "personnel";
-type User = { id: number; name: string; email: string; role: Role };
+type Role = "passenger" | "personnel" | "admin";
+type User = {
+    id: number;
+    name: string;
+    email: string;
+    role: Role;
+    role_status?: "pending" | "active" | "rejected";
+    company_id?: number | null;
+};
 type AuthResp = { status?: boolean; message?: string; token?: string; user?: User };
 
 interface AppProviderType {
@@ -26,10 +33,8 @@ interface AppProviderType {
 
 const AppContext = createContext<AppProviderType | undefined>(undefined);
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") ||
-    "http://127.0.0.1:8000/api") as string;
 
-axios.defaults.baseURL = API_URL;
+axios.defaults.baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/+$/,'');
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
@@ -43,7 +48,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     const goByRole = (role: Role) => {
-        if (role === "personnel") router.push("/dashboard/personnel");
+        if (role === "admin") router.push("/dashboard/admin");
+        else if (role === "personnel") router.push("/dashboard/personnel");
         else router.push("/dashboard/passenger");
     };
 
@@ -132,24 +138,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         email: string,
         password: string,
         password_confirmation: string,
-        role: Role
+        role: Role,
+        company_id?: number
     ) => {
         setIsLoading(true);
         try {
-            await axios.post(
-                "/register",
-                { name, email, password, password_confirmation, role },
-                { headers: { Accept: "application/json" } }
+            await axios.post("/register", {
+                name,
+                email,
+                password,
+                password_confirmation,
+                role,
+                company_id,
+            });
+            toast.success(
+                role === "personnel"
+                    ? "Kayıt alındı. Personel onayı bekleniyor."
+                    : "Kayıt başarılı. Lütfen giriş yapın."
             );
-            toast.success("Kayıt başarılı. Lütfen giriş yapın.");
             router.push("/auth?mode=login");
         } catch (err: any) {
-            console.error("Register error:", err?.response?.data);
-            toast.error(err?.response?.data?.message || "Kayıt hatası");
+            const msg = err?.response?.data?.message;
+            if (err?.response?.status === 403 && msg?.includes("Personel")) {
+                toast.error(
+                    "Personel başvurunuz onay bekliyor. Admin onayından sonra giriş yapın."
+                );
+                router.push("/auth?mode=login");
+                return;
+            }
+            toast.error(msg || "Kayıt hatası");
         } finally {
             setIsLoading(false);
         }
     };
+
 
     const logout = () => {
         setToken(null);

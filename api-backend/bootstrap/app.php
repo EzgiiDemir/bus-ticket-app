@@ -11,8 +11,14 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware): void {
-        //
+    ->withMiddleware(function (Middleware $middleware) {
+        // ALIASES
+        $middleware->alias([
+            'admin' => \App\Http\Middleware\AdminOnly::class,
+            'personnel.active' => \App\Http\Middleware\PersonnelActive::class,
+        ]);
+
+        // (opsiyonel) grup eklemiyorsan başka ayar gerekmez
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

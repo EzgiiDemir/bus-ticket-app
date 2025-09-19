@@ -14,22 +14,29 @@
     <pharConfigPath>$PROJECT_DIR$/api-backend/composer.json</pharConfigPath>
     <execution />
   </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="PHP File" />
+      </list>
+    </option>
+  </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/frontend" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
     <option name="SIGN_OFF_COMMIT" value="true" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "EzgiiDemir"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;EzgiiDemir&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/EzgiiDemir/bus-ticket-app.git",
-    "accountId": "7e4ed5c0-86be-43e3-84fd-ed75bd7d0c9b"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/EzgiiDemir/bus-ticket-app.git&quot;,
+    &quot;accountId&quot;: &quot;7e4ed5c0-86be-43e3-84fd-ed75bd7d0c9b&quot;
   }
-}]]></component>
+}</component>
   <component name="PhpWorkspaceProjectConfiguration" interpreter_name="$PROJECT_DIR$/../../../../tools/php82/php.exe">
     <include_path>
       <path value="$PROJECT_DIR$/api-backend/vendor/brick/math" />
@@ -146,6 +153,9 @@
       <path value="$PROJECT_DIR$/api-backend/vendor/sebastian/version" />
       <path value="$PROJECT_DIR$/api-backend/vendor/sebastian/type" />
       <path value="$PROJECT_DIR$/api-backend/vendor/laravel/sanctum" />
+      <path value="$PROJECT_DIR$/api-backend/vendor/psr/cache" />
+      <path value="$PROJECT_DIR$/api-backend/vendor/doctrine/deprecations" />
+      <path value="$PROJECT_DIR$/api-backend/vendor/doctrine/dbal" />
     </include_path>
   </component>
   <component name="ProjectColorInfo">{
@@ -162,7 +172,6 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "master",
     "last_opened_file_path": "C:/Users/ezgi.demir/Desktop/crud/frontend/public",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -170,7 +179,7 @@
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "vcs.Git",
-    "ts.external.directory.path": "C:\\Program Files\\JetBrains\\PhpStorm 2025.2.1\\plugins\\javascript-plugin\\jsLanguageServicesImpl\\external",
+    "ts.external.directory.path": "C:\\Users\\ezgi.demir\\Desktop\\crud\\frontend\\node_modules\\typescript\\lib",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
