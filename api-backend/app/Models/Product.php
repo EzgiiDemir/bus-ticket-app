@@ -10,19 +10,41 @@ class Product extends Model
     use HasFactory;
 
     protected $fillable = [
-        'trip','company_name','terminal_from','terminal_to',
-        'departure_time','cost','capacity_reservation','is_active',
-        'note','user_id','created_by','updated_by','company_id'
+        'trip',
+        'company_name',
+        'terminal_from',
+        'terminal_to',
+        'departure_time',
+        'cost',
+        'capacity_reservation',
+        'is_active',
+        'note',
+        'user_id',
+        'created_by',
+        'updated_by',
+        'company_id',
+        // yeni alanlar
+        'duration',
+        'route',
+        'bus_type',
+        'important_notes',
+        'cancellation_policy',
     ];
 
     protected $casts = [
         'departure_time' => 'datetime:Y-m-d\TH:i',
         'is_active' => 'boolean',
         'cost' => 'decimal:2',
+        'route' => 'array', // JSON olarak otomatik array dönsün
     ];
 
-    public function user(){ return $this->belongsTo(User::class); }
-    public function company(){ return $this->belongsTo(Company::class); }
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 
-
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

@@ -1,11 +1,21 @@
 <?php
 
+use App\Http\Controllers\PublicProductController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\Admin\ApprovalController;
 use App\Models\Company;
+use App\Models\Terminal;
+
+
+Route::prefix('public')
+    ->withoutMiddleware(['auth:sanctum'])   // kritik
+    ->group(function () {
+        Route::get('/products', [PublicProductController::class, 'index']);
+        Route::get('/products/{product}', [PublicProductController::class, 'show']);
+    });
 
 // --- Public ---
 Route::get('/public/products', [ProductController::class, 'publicIndex']);
@@ -70,4 +80,12 @@ Route::middleware('auth:sanctum')->group(function () {
             ));
         });
     });
+
+    Route::get('/public/terminals', fn() =>
+    response()->json([
+        'terminals' => Terminal::select('id','name','city','code')
+            ->orderBy('city')->orderBy('name')->get()
+    ])
+    );
+
 });

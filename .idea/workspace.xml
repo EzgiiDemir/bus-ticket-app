@@ -4,7 +4,50 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ef1886e3-1d19-471a-a296-452f827323e0" name="Changes" comment="fronted update" />
+    <list default="true" id="ef1886e3-1d19-471a-a296-452f827323e0" name="Changes" comment="fronted update">
+      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/PublicProductController.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/app/Models/Terminal.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/database/migrations/2025_09_21_152955_add_trip_details_to_products.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/database/migrations/2025_09_21_153044_create_terminals_table.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/database/seeders/TerminalSeeder.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/layout.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/orders/page.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/profile/page.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/trips/page.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/app/lib/datetime.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/app/lib/export.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/php.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/php.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/.env.example" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/.github/workflows/tests.yml" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/.github/workflows/tests.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/OrderController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/OrderController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Personnel/PeopleController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Personnel/PeopleController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/ProductController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/ProductController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Models/Order.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Models/Order.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Models/Product.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Models/Product.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Providers/AppServiceProvider.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Providers/AppServiceProvider.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/database/migrations/2025_09_11_181041_add_note_to_products_table.php" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/database/seeders/DatabaseSeeder.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/database/seeders/DatabaseSeeder.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/routes/api.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/routes/api.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/approvals/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/approvals/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/companies/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/companies/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/customers/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/layout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/layout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/personnel/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/trips/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/customers/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/layout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/layout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/orders/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/orders/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/trips/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/lib/datetime.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/lib/datetime.ts" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -31,13 +74,13 @@
     &quot;assignee&quot;: &quot;EzgiiDemir&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/EzgiiDemir/bus-ticket-app.git&quot;,
-    &quot;accountId&quot;: &quot;7e4ed5c0-86be-43e3-84fd-ed75bd7d0c9b&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/EzgiiDemir/bus-ticket-app.git",
+    "accountId": "566f2a24-be82-4617-b8d4-9d58045aa6dd"
   }
-}</component>
-  <component name="PhpWorkspaceProjectConfiguration" interpreter_name="$PROJECT_DIR$/../../../../tools/php82/php.exe">
+}]]></component>
+  <component name="PhpWorkspaceProjectConfiguration" interpreter_name="$PROJECT_DIR$/../../../../wamp64/bin/php/php8.3.14/php.exe">
     <include_path>
       <path value="$PROJECT_DIR$/api-backend/vendor/brick/math" />
       <path value="$PROJECT_DIR$/api-backend/vendor/symfony/yaml" />
@@ -172,14 +215,16 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "last_opened_file_path": "C:/Users/ezgi.demir/Desktop/crud/frontend/public",
+    "git-widget-placeholder": "main",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "C:/Users/Ezgi/Desktop/bus-ticket-app",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "vcs.Git",
-    "ts.external.directory.path": "C:\\Users\\ezgi.demir\\Desktop\\crud\\frontend\\node_modules\\typescript\\lib",
+    "ts.external.directory.path": "C:\\Users\\Ezgi\\Desktop\\bus-ticket-app\\frontend\\node_modules\\typescript\\lib",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -197,8 +242,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-b598e85cdad2-JavaScript-PS-252.25557.128" />
-        <option value="bundled-php-predefined-a98d8de5180a-ce40d0652d34-com.jetbrains.php.sharedIndexes-PS-252.25557.128" />
+        <option value="bundled-js-predefined-d6986cc7102b-f27c65a3e318-JavaScript-PS-251.23774.466" />
+        <option value="bundled-php-predefined-a98d8de5180a-aaeaa8632555-com.jetbrains.php.sharedIndexes-PS-251.23774.466" />
       </set>
     </attachedChunks>
   </component>
@@ -212,6 +257,7 @@
       <workItem from="1757397134225" duration="958000" />
       <workItem from="1757398126621" duration="47128000" />
       <workItem from="1757596071625" duration="19730000" />
+      <workItem from="1758487262479" duration="312000" />
     </task>
     <task id="LOCAL-00001" summary="fronted update">
       <option name="closed" value="true" />

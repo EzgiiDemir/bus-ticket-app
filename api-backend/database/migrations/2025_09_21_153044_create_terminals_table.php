@@ -6,13 +6,15 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        Schema::table('products', function (Blueprint $table) {
-            $table->text('note')->nullable()->after('is_active');
+        Schema::create('terminals', function (Blueprint $t) {
+            $t->id();
+            $t->string('city');
+            $t->string('name');
+            $t->string('code')->unique();
+            $t->timestamps();
         });
     }
     public function down(): void {
-        Schema::table('products', function (Blueprint $table) {
-            $table->dropColumn('note');
-        });
+        Schema::dropIfExists('terminals');
     }
 };
