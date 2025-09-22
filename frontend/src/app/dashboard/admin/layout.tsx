@@ -10,11 +10,13 @@ type NavItem = { href:string; label:string; Icon: any };
 
 const NAV: NavItem[] = [
     { href: '/dashboard/admin', label: 'Dashboard', Icon: LayoutDashboard },
-    { href: '/dashboard/admin/personnel', label: 'Personnel', Icon: Users },
-    { href: '/dashboard/admin/companies', label: 'Companies', Icon: Building2 },
-    { href: '/dashboard/admin/customers', label: 'Customers', Icon: Users },
-    { href: '/dashboard/admin/trips', label: 'Trips', Icon: Bus },
-    { href: '/dashboard/admin/approvals', label: 'Approvals', Icon: CheckCircle2 },
+    { href: '/dashboard/admin/personnel', label: 'Personeller', Icon: Users },
+    { href: '/dashboard/admin/companies', label: 'Firmalar', Icon: Building2 },
+    { href: '/dashboard/admin/customers', label: 'Müşteriler', Icon: Users },
+    { href: '/dashboard/admin/trips', label: 'Seferler', Icon: Bus },
+    { href: '/dashboard/admin/approvals', label: 'Onay kutusu', Icon: CheckCircle2 },
+    { href: '/dashboard/admin/account', label: 'Hesabım', Icon: Users },
+
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

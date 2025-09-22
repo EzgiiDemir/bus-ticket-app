@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\TripAnalyticsController;
 use App\Http\Controllers\PublicProductController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
@@ -28,6 +29,13 @@ Route::post('/register',[AuthController::class,'register']);
 Route::post('/login',[AuthController::class,'login']);
 Route::post('/password/forgot',[AuthController::class,'forgotPassword']);
 Route::post('/password/reset',[AuthController::class,'resetPassword']);
+
+Route::prefix('admin')
+    ->middleware(['auth:sanctum','admin'])
+    ->group(function () {
+        Route::get('/trips/{product}/creator', [TripAnalyticsController::class, 'creator']);
+        Route::get('/trips/{product}/buyers',  [TripAnalyticsController::class, 'buyers']);
+    });
 
 Route::middleware('auth:sanctum')->group(function () {
     // profil
@@ -70,6 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/products', [ProductController::class,'store']);
         Route::put('/products/{id}', [ProductController::class,'update']);
         Route::delete('/products/{id}', [ProductController::class,'destroy']);
+        Route::get('/products/{product}/orders', [\App\Http\Controllers\Personnel\PeopleController::class, 'ordersByProduct']);
 
         Route::prefix('personnel')->group(function () {
             Route::get('/stats', [\App\Http\Controllers\Personnel\StatsController::class,'index']);

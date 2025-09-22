@@ -12,21 +12,21 @@ use Illuminate\Support\Facades\Schema;
 class OrderController extends Controller
 {
     // Auth kullanıcı kendi siparişlerini görür
-    public function index(Request $request)
+    public function index(Request $r)
     {
-        $user = $request->user();
-        $orders = Order::with([
-            'product:id,trip,company_name,terminal_from,terminal_to,departure_time,cost'
-        ])
-            ->when($user, fn($q)=> $q->where('user_id', $user->id))
-            ->latest()->get();
+        $u = $r->user();
 
-        return response()->json(['status'=>true,'orders'=>$orders]);
+        $q = \App\Models\Order::query()
+            ->with(['product:id,trip,terminal_from,terminal_to,departure_time,cost'])
+            ->where('user_id', $u->id)
+            ->latest();
+
+        $perPage = (int) $r->integer('per_page', 10);
+        return response()->json($q->paginate($perPage));
     }
-
-    // Satın alma (misafir veya auth)
     public function store(Request $request)
     {
+        global $r;
         $qty = (int)$request->input('qty', 0);
 
         $data = $request->validate([
@@ -34,6 +34,8 @@ class OrderController extends Controller
             'qty'                     => ['required','integer','min:1','max:10'],
             'seats'                   => ['required','array','size:'.$qty],
             'seats.*'                 => ['string'],
+            'unit_price'=>'required|numeric|min:0',
+
 
             // yolcu
             'passenger_name'          => ['required','string','max:255'],
@@ -52,7 +54,9 @@ class OrderController extends Controller
             'card_exp'                => ['required','regex:/^\d{2}\/\d{2}$/'],
             'card_cvv'                => ['required','string','min:3','max:4'],
         ]);
-
+        $data['user_id'] = $r->user()->id;
+        $data['total']   = $data['qty'] * $data['unit_price'];
+        $order = \App\Models\Order::create($data);
         $product = Product::findOrFail($data['product_id']);
         if (!$product->is_active) {
             return response()->json(['status'=>false,'message'=>'Trip not available'], 422);

@@ -74,13 +74,13 @@
     &quot;assignee&quot;: &quot;EzgiiDemir&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/EzgiiDemir/bus-ticket-app.git",
-    "accountId": "566f2a24-be82-4617-b8d4-9d58045aa6dd"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/EzgiiDemir/bus-ticket-app.git&quot;,
+    &quot;accountId&quot;: &quot;566f2a24-be82-4617-b8d4-9d58045aa6dd&quot;
   }
-}]]></component>
-  <component name="PhpWorkspaceProjectConfiguration" interpreter_name="$PROJECT_DIR$/../../../../wamp64/bin/php/php8.3.14/php.exe">
+}</component>
+  <component name="PhpWorkspaceProjectConfiguration" interpreter_name="$PROJECT_DIR$/../../../../tools/php82/php.exe">
     <include_path>
       <path value="$PROJECT_DIR$/api-backend/vendor/brick/math" />
       <path value="$PROJECT_DIR$/api-backend/vendor/symfony/yaml" />
@@ -224,7 +224,7 @@
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "vcs.Git",
-    "ts.external.directory.path": "C:\\Users\\Ezgi\\Desktop\\bus-ticket-app\\frontend\\node_modules\\typescript\\lib",
+    "ts.external.directory.path": "C:\\Users\\ezgi.demir\\Desktop\\crud\\frontend\\node_modules\\typescript\\lib",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>

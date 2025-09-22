@@ -22,7 +22,7 @@ class Order extends Model
         'passenger_nationality',
         'passenger_email',
         'passenger_phone',
-        'seats',
+        'seats',        // JSON dizi
         'pnr',
         'status',
     ];
@@ -34,7 +34,10 @@ class Order extends Model
         'total'      => 'decimal:2',
     ];
 
-    // İlişkiler
+    // API çıktısına normalize alan ekle
+    protected $appends = ['seat_numbers'];
+
+    // ------- İlişkiler -------
     public function product()
     {
         return $this->belongsTo(Product::class);
@@ -45,9 +48,42 @@ class Order extends Model
         return $this->belongsTo(User::class)->withDefault();
     }
 
-    // OrderItem modelin varsa (opsiyonel)
+    // OrderItem var ise
     public function items()
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    // ------- Scopes -------
+    public function scopeForProduct($q, int $productId)
+    {
+        return $q->where('product_id', $productId);
+    }
+
+    // ------- Accessor/Mutator: seat_numbers -------
+    public function getSeatNumbersAttribute()
+    {
+        // seats kolonu JSON array ise onu döndür
+        if (!empty($this->attributes['seats'])) {
+            $v = $this->attributes['seats'];
+            if (is_string($v)) {
+                $decoded = json_decode($v, true);
+                return json_last_error() === JSON_ERROR_NONE ? $decoded : $v;
+            }
+            return $v;
+        }
+        // Eski şema desteği: seat_numbers kolonu varsa
+        if (array_key_exists('seat_numbers', $this->attributes)) {
+            $v = $this->attributes['seat_numbers'];
+            $decoded = json_decode($v, true);
+            return json_last_error() === JSON_ERROR_NONE ? $decoded : $v;
+        }
+        return [];
+    }
+
+    public function setSeatNumbersAttribute($value)
+    {
+        // Dışarıdan seat_numbers set edilirse seats’e yaz
+        $this->attributes['seats'] = is_array($value) ? json_encode($value) : $value;
     }
 }

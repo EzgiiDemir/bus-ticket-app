@@ -52,6 +52,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         else if (role === "personnel") router.push("/dashboard/personnel");
         else router.push("/dashboard/passenger");
     };
+    useEffect(()=>{
+        axios.defaults.baseURL = process.env.NEXT_PUBLIC_API_URL;
+        if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        else delete axios.defaults.headers.common['Authorization'];
+    }, [token]);
 
     useEffect(() => {
         const id = axios.interceptors.response.use(

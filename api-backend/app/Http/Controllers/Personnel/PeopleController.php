@@ -58,4 +58,20 @@ class PeopleController extends Controller
         $per = max(1, min(100, (int)$r->integer('per_page',10)));
         return $q->paginate($per);
     }
+    public function ordersByProduct(\Illuminate\Http\Request $r, \App\Models\Product $product)
+    {
+        $u = $r->user();
+        abort_unless($u->role === 'personnel', 403);
+        abort_unless($product->user_id == $u->id && (!$u->company_id || $product->company_id == $u->company_id), 403);
+
+        $perPage = max(1, (int)$r->input('per_page', 10));
+
+        $orders = \App\Models\Order::query()
+            ->where('product_id', $product->id)
+            ->orderByDesc('id')
+            ->paginate($perPage);
+
+        return response()->json($orders);
+    }
+
 }

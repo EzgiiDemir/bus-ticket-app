@@ -64,6 +64,9 @@ export default function PersonnelLayout({ children }: { children: React.ReactNod
                         <Item href="/dashboard/personnel/orders" label="Siparişler" Icon={ClipboardList} />
                         <Item href="/dashboard/personnel/customers" label="Müşteriler" Icon={Users} />
                         <Item href="/dashboard/personnel/company" label="Şirket" Icon={Building2} />
+                        <Item href="/dashboard/personnel/history" label="Geçmiş Seferler" Icon={ClipboardList} />
+                        <Item href="/dashboard/personnel/account" label="Hesabım" Icon={Users} />
+
                     </nav>
                 </aside>
 

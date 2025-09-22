@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { myAppHook } from '../../../../../context/AppProvider';
-import { fmtTR } from '@/app/lib/datetime';
 import { exportCSV, exportJSON } from '@/app/lib/export';
 
 type Trip = {
@@ -22,56 +21,158 @@ type TripDetail = Trip & {
 };
 type PurchaseResp = { status:boolean; message?:string; order?:any; pnr?:string };
 
+type Page<T> = {
+    data:T[]; current_page?:number; last_page?:number; per_page?:number; total?:number;
+    next_page_url?:string|null; prev_page_url?:string|null;
+};
+
+const PER_PAGE = 10;
+const fmtTR = (iso?:string) =>
+    iso ? new Date(iso).toLocaleString('tr-TR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+
 export default function PassengerTrips(){
     const router = useRouter();
-    const { token, isLoading } = myAppHook() as any;
+    const { isLoading, token } = myAppHook() as any;
 
-    const [rows,setRows]=useState<Trip[]>([]);
-    const [q,setQ]=useState('');
-    const [page,setPage]=useState(1);
-    const pageSize=10;
+    const [pageData,setPageData] = useState<Page<Trip>|null>(null);
+    const [page,setPage] = useState(1);
+    const [q,setQ] = useState('');
+    const [loading,setLoading] = useState(false);
+    const [err,setErr] = useState('');
 
     const [open,setOpen]=useState(false);
-    const [loading,setLoading]=useState(false);
     const [detail,setDetail]=useState<TripDetail|null>(null);
+    const [submitting,setSubmitting]=useState(false);
 
-    useEffect(()=>{
-        axios.get('/public/products') // auth’suz liste
-            .then(r=> setRows(r.data?.products||[]))
-            .catch(()=> setRows([]));
-    },[]);
+    const currency = useMemo(
+        ()=> new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:2}),[]
+    );
 
-    const filtered = useMemo(()=>{
-        const s=q.trim().toLowerCase();
-        return s? rows.filter(r=>JSON.stringify(r).toLowerCase().includes(s)) : rows;
-    },[rows,q]);
+    // --- public/products her iki şekle de uyumlu yükleyici ---
+    const normalizeToPage = (res:any, p:number): Page<Trip> => {
+        // 1) {status:true, products:[...]} (senin publicIndex)
+        if (res?.status === true && Array.isArray(res?.products)) {
+            const all:Trip[] = res.products;
+            const start = (p-1)*PER_PAGE;
+            const slice = all.slice(start, start+PER_PAGE);
+            return {
+                data: slice,
+                total: all.length,
+                per_page: PER_PAGE,
+                current_page: p,
+                last_page: Math.max(1, Math.ceil(all.length/PER_PAGE)),
+                next_page_url: null,
+                prev_page_url: null,
+            };
+        }
+        // 2) {data:[...], total, per_page, current_page, ...} (Laravel paginator)
+        if (Array.isArray(res?.data) && (typeof res?.total === 'number' || typeof res?.per_page === 'number')) {
+            return res as Page<Trip>;
+        }
+        // 3) Düz dizi
+        if (Array.isArray(res)) {
+            const all:Trip[] = res;
+            const start = (p-1)*PER_PAGE;
+            const slice = all.slice(start, start+PER_PAGE);
+            return {
+                data: slice,
+                total: all.length,
+                per_page: PER_PAGE,
+                current_page: p,
+                last_page: Math.max(1, Math.ceil(all.length/PER_PAGE)),
+                next_page_url: null,
+                prev_page_url: null,
+            };
+        }
+        // 4) Güvenli varsayılan
+        return { data: [], total: 0, per_page: PER_PAGE, current_page: 1, last_page: 1, next_page_url: null, prev_page_url: null };
+    };
 
-    const totalPages = Math.max(1, Math.ceil(filtered.length/pageSize));
-    const pageRows = filtered.slice((page-1)*pageSize, page*pageSize);
-    const currency = useMemo(()=> new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:2}),[]);
-
-    const cols = [
-        { key:'trip', title:'Sefer' },
-        { key:'company_name', title:'Firma' },
-        { key:'route', title:'Güzergâh', map:(r:Trip)=>`${r.terminal_from} → ${r.terminal_to}` },
-        { key:'departure_time', title:'Kalkış', map:(r:Trip)=>fmtTR(r.departure_time) },
-        { key:'cost', title:'Ücret', map:(r:Trip)=>currency.format(Number(r.cost||0)) },
-        { key:'duration', title:'Süre' },
-        { key:'bus_type', title:'Otobüs Tipi' },
-    ];
-
-    const openDetail = async (id:number)=>{
-        if (isLoading) return;
+    const loadByUrl = async (url:string)=>{
         setLoading(true);
         try{
-            const { data } = await axios.get(`/public/products/${id}`); // public detay
-            const rows = data.seat_map?.rows ?? 12;
-            const layout = data.seat_map?.layout || data.bus_type || '2+1';
-            setDetail({ ...data, seat_map:{ rows, layout }, taken_seats: data.taken_seats || [] });
+            const { data } = await axios.get(url);
+            setPageData(normalizeToPage(data, page));
+            setPage((data?.current_page ?? page) || 1);
+            setErr('');
+        }catch(e:any){
+            setErr(e?.response?.data?.message || 'Seferler alınamadı');
+        }finally{ setLoading(false); }
+    };
+
+    const loadPage = async (p:number)=>{
+        setLoading(true);
+        try{
+            const { data } = await axios.get('/public/products', { params: { page: p, per_page: PER_PAGE } });
+            setPageData(normalizeToPage(data, p));
+            setPage(p);
+            setErr('');
+        }catch(e:any){
+            setErr(e?.response?.data?.message || 'Seferler alınamadı');
+        }finally{ setLoading(false); }
+    };
+
+    useEffect(()=>{ loadPage(1); },[]);
+
+    const rows = pageData?.data ?? [];
+    const filtered = useMemo(()=>{
+        const s=q.trim().toLowerCase();
+        if(!s) return rows;
+        return rows.filter(r=> JSON.stringify(r).toLowerCase().includes(s));
+    },[rows,q]);
+
+    const lastPage =
+        pageData?.last_page
+        ?? (pageData?.total && pageData?.per_page
+            ? Math.max(1, Math.ceil((pageData.total as number)/(pageData.per_page as number)))
+            : 1);
+
+    const goFirst = ()=> loadPage(1);
+    const goPrev  = ()=> pageData?.prev_page_url ? loadByUrl(pageData.prev_page_url) : loadPage(Math.max(1, page-1));
+    const goNext  = ()=> pageData?.next_page_url ? loadByUrl(pageData.next_page_url) : loadPage(Math.min(lastPage, page+1));
+    const goLast  = ()=> loadPage(lastPage);
+
+    // --- Detail (public detail yoksa /products/:id'e düş) ---
+    const openDetail = async (id:number)=>{
+        setLoading(true);
+        try{
+            let data: any;
+            try {
+                ({ data } = await axios.get(`/public/products/${id}`));
+            } catch {
+                ({ data } = await axios.get(`/products/${id}`)); // fallback
+            }
+            const rowsCount = data?.seat_map?.rows ?? 12;
+            const layout = data?.seat_map?.layout || data?.bus_type || '2+1';
+            setDetail({ ...data, seat_map:{ rows: rowsCount, layout }, taken_seats: data.taken_seats || [] });
             setOpen(true);
         } catch(e:any){
             alert(e?.response?.data?.message || 'Sefer bulunamadı');
         } finally { setLoading(false); }
+    };
+
+    // --- Purchase (auth required) ---
+    const purchase = async (payload:any)=>{
+        if (isLoading) return;
+        if (!token) { router.push('/auth?mode=login'); return; }
+        setSubmitting(true);
+        try{
+            const { data } = await axios.post<PurchaseResp>('/orders', payload, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (data?.status) {
+                alert(`PNR: ${data.pnr || ''}`);
+                setOpen(false); setDetail(null);
+                router.push('/dashboard/passenger');
+            } else {
+                alert(data?.message || 'Satın alma başarısız');
+            }
+        } catch(e:any){
+            const m = e?.response?.data?.message
+                || (e?.response?.data?.errors && Object.values(e.response.data.errors).flat().join('\n'))
+                || 'Satın alma hatası';
+            alert(m);
+        } finally { setSubmitting(false); }
     };
 
     return (
@@ -79,18 +180,36 @@ export default function PassengerTrips(){
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-bold text-indigo-900">Sefer Ara</h1>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <input className="w-full sm:w-64 rounded-xl border px-3 py-2" placeholder="Ara (şehir, firma...)"
-                           value={q} onChange={e=>{ setPage(1); setQ(e.target.value); }}/>
+                    <input
+                        className="w-full sm:w-64 rounded-xl border px-3 py-2"
+                        placeholder="Ara (şehir, firma...)"
+                        value={q}
+                        onChange={e=>setQ(e.target.value)}
+                    />
                     <div className="flex gap-2">
-                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportCSV('seferler', filtered, cols as any)}>CSV</button>
-                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('seferler', filtered)}>JSON</button>
+                        <button
+                            className="px-3 py-2 rounded-lg border"
+                            onClick={()=>exportCSV('seferler', rows, [
+                                { key:'trip', title:'Sefer' },
+                                { key:'company_name', title:'Firma' },
+                                { key:'route', title:'Güzergâh', map:(r:Trip)=>`${r.terminal_from} → ${r.terminal_to}` },
+                                { key:'departure_time', title:'Kalkış', map:(r:Trip)=>fmtTR(r.departure_time) },
+                                { key:'cost', title:'Ücret', map:(r:Trip)=>currency.format(Number(r.cost||0)) },
+                                { key:'duration', title:'Süre' },
+                                { key:'bus_type', title:'Otobüs Tipi' },
+                            ] as any)}
+                        >CSV</button>
+                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('seferler', rows)}>JSON</button>
                     </div>
                 </div>
             </div>
 
+            {err && <div className="rounded-xl border border-red-300 bg-red-50 text-red-700 p-3 text-sm">{err}</div>}
+            {loading && <div className="text-sm text-indigo-900/60">Yükleniyor…</div>}
+
             {/* Mobil */}
             <div className="md:hidden space-y-3">
-                {pageRows.map(r=>(
+                {filtered.map(r=>(
                     <div key={r.id} className="rounded-2xl border bg-white p-4">
                         <div className="flex items-center justify-between gap-2">
                             <div className="font-semibold">{r.trip ?? '-'}</div>
@@ -119,7 +238,7 @@ export default function PassengerTrips(){
                     </tr>
                     </thead>
                     <tbody>
-                    {pageRows.map(r=>(
+                    {filtered.map(r=>(
                         <tr key={r.id} className="border-t">
                             <td className="py-2 font-medium">{r.trip ?? '-'}</td>
                             <td>{r.company_name ?? '-'}</td>
@@ -136,26 +255,29 @@ export default function PassengerTrips(){
                     </tbody>
                 </table>
 
+                {/* Pagination */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between mt-3">
-                    <div className="text-sm text-indigo-900/60">Toplam {filtered.length} kayıt • Sayfa {page}/{totalPages}</div>
+                    <div className="text-sm text-indigo-900/60">
+                        Toplam {pageData?.total ?? rows.length} kayıt • Sayfa {page}/{lastPage}
+                    </div>
                     <div className="flex gap-2">
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Geri</button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>İleri</button>
+                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page<=1} onClick={goFirst}>İlk</button>
+                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page<=1} onClick={goPrev}>Geri</button>
+                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page>=lastPage} onClick={goNext}>İleri</button>
+                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page>=lastPage} onClick={goLast}>Son</button>
                     </div>
                 </div>
             </div>
 
             {open && detail && (
-                <PurchaseModal detail={detail}
-                               onClose={()=>{ setOpen(false); setDetail(null); }}
-                               onPurchased={(pnr)=>{
-                                   setOpen(false); setDetail(null);
-                                   alert(`PNR: ${pnr}`);
-                                   router.push('/dashboard/passenger'); // yönlendirme
-                               }}/>
+                <PurchaseModal
+                    detail={detail}
+                    onClose={()=>{ setOpen(false); setDetail(null); }}
+                    onPurchased={(pnr)=>{ alert(`PNR: ${pnr}`); setOpen(false); setDetail(null); router.push('/dashboard/passenger'); }}
+                    submitting={submitting}
+                    onPurchase={purchase}
+                />
             )}
-
-            {loading && <div className="fixed inset-0 bg-black/20 grid place-items-center text-white">Yükleniyor…</div>}
         </div>
     );
 }
@@ -163,11 +285,8 @@ export default function PassengerTrips(){
 /* ---------------- Modal + SeatMap ---------------- */
 
 function PurchaseModal({
-                           detail, onClose, onPurchased
-                       }:{ detail:TripDetail; onClose:()=>void; onPurchased:(pnr:string)=>void }){
-    const router = useRouter();
-    const { token, isLoading } = myAppHook() as any;
-
+                           detail, onClose, onPurchased, submitting, onPurchase
+                       }:{ detail:TripDetail; onClose:()=>void; onPurchased:(pnr:string)=>void; submitting:boolean; onPurchase:(payload:any)=>Promise<void> }){
     const layout = (detail.seat_map?.layout || detail.bus_type || '2+1') as '2+1'|'2+2';
     const rows = detail.seat_map?.rows ?? 12;
 
@@ -175,59 +294,34 @@ function PurchaseModal({
     const [seats,setSeats]=useState<string[]>([]);
     const [passenger,setPassenger]=useState({ first_name:'', last_name:'', doc_type:'tc', national_id:'', passport_no:'', nationality:'TR', email:'', phone:'' });
     const [payment,setPayment]=useState({ card_holder:'', card_number:'', card_exp:'', card_cvv:'' });
-    const [submitting,setSubmitting]=useState(false);
 
     const taken = useMemo(()=> new Set(detail.taken_seats||[]),[detail.taken_seats]);
-    const price = useMemo(()=> Number(detail.cost||0) * seats.length, [detail.cost, seats.length]);
     const canSubmit = seats.length===qty
         && (passenger.doc_type==='tc' ? passenger.national_id.trim() : passenger.passport_no.trim())
         && passenger.first_name.trim() && passenger.last_name.trim()
-        && payment.card_holder.trim() && payment.card_number.replace(/\s+/g,'').length>=12
+        && (passenger.first_name + ' ' + passenger.last_name).trim().length>1
+        && payment.card_number.replace(/\s+/g,'').length>=12
         && /\d{2}\/\d{2}/.test(payment.card_exp) && payment.card_cvv.length>=3;
 
-    const toggleSeat=(s:string)=>{
-        if(taken.has(s)) return;
-        setSeats(curr=>{
-            const has = curr.includes(s);
-            let next = has ? curr.filter(x=>x!==s) : [...curr, s];
-            if(next.length>qty) next = next.slice(0, qty);
-            return next;
-        });
-    };
-
     const submit = async ()=>{
-        if (isLoading) return;
-        if (!token) { router.push('/auth?mode=login'); return; } // login zorunlu
         if (!canSubmit) return;
-
-        setSubmitting(true);
-        try{
-            const payload = {
-                product_id: detail.id,
-                qty,
-                seats,
-                passenger_name: `${passenger.first_name} ${passenger.last_name}`.trim(),
-                passenger_doc_type: passenger.doc_type,
-                passenger_national_id: passenger.doc_type==='tc' ? passenger.national_id : null,
-                passenger_passport_no: passenger.doc_type==='passport' ? passenger.passport_no : null,
-                passenger_nationality: passenger.doc_type==='passport' ? passenger.nationality : 'TR',
-                passenger_email: passenger.email || null,
-                passenger_phone: passenger.phone || null,
-                card_holder: payment.card_holder,
-                card_number: payment.card_number,
-                card_exp: payment.card_exp,
-                card_cvv: payment.card_cvv,
-            };
-            // Authorization header’ı AppProvider ayarlıyor. Burada OVERRIDE YOK.
-            const { data } = await axios.post<PurchaseResp>('/orders', payload);
-            if (data?.status) onPurchased(data?.pnr || '');
-            else alert(data?.message || 'Satın alma başarısız');
-        } catch(e:any){
-            const m = e?.response?.data?.message
-                || (e?.response?.data?.errors && Object.values(e.response.data.errors).flat().join('\n'))
-                || 'Satın alma hatası';
-            alert(m);
-        } finally { setSubmitting(false); }
+        const payload = {
+            product_id: detail.id,
+            qty,
+            seats,
+            passenger_name: `${passenger.first_name} ${passenger.last_name}`.trim(),
+            passenger_doc_type: passenger.doc_type,
+            passenger_national_id: passenger.doc_type==='tc' ? passenger.national_id : null,
+            passenger_passport_no: passenger.doc_type==='passport' ? passenger.passport_no : null,
+            passenger_nationality: passenger.doc_type==='passport' ? passenger.nationality : 'TR',
+            passenger_email: passenger.email || null,
+            passenger_phone: passenger.phone || null,
+            card_holder: `${passenger.first_name} ${passenger.last_name}`.trim(),
+            card_number: payment.card_number,
+            card_exp: payment.card_exp,
+            card_cvv: payment.card_cvv,
+        };
+        await onPurchase(payload);
     };
 
     const currency = useMemo(()=> new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY'}),[]);
@@ -259,7 +353,15 @@ function PurchaseModal({
                                     </select>
                                 </div>
                             </div>
-                            <SeatMap rows={rows} layout={layout} taken={taken} selected={seats} onToggle={toggleSeat}/>
+                            <SeatMap rows={rows} layout={layout} taken={taken} selected={seats} onToggle={(s)=>{
+                                if(taken.has(s)) return;
+                                setSeats(curr=>{
+                                    const has = curr.includes(s);
+                                    let next = has ? curr.filter(x=>x!==s) : [...curr, s];
+                                    if(next.length>qty) next = next.slice(0, qty);
+                                    return next;
+                                });
+                            }}/>
                             <div className="mt-3 text-sm text-indigo-900/70">Seçilen: {seats.length ? seats.join(', ') : '—'}</div>
                         </section>
 
@@ -313,7 +415,7 @@ function PurchaseModal({
 
                         <section className="rounded-xl border p-3">
                             <h3 className="font-semibold mb-2">Ödeme Bilgileri</h3>
-                            <Input label="Kart Üzerindeki İsim" value={payment.card_holder} onChange={v=>setPayment(s=>({...s, card_holder:v}))}/>
+                            <Input label="Kart Üzerindeki İsim" value={`${passenger.first_name} ${passenger.last_name}`.trim()} onChange={()=>{}} />
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                                 <Input label="Kart Num." value={payment.card_number} onChange={v=>setPayment(s=>({...s, card_number:v}))} placeholder="**** **** **** ****"/>
                                 <Input label="SKT (AA/YY)" value={payment.card_exp} onChange={v=>setPayment(s=>({...s, card_exp:v}))} placeholder="MM/YY"/>
@@ -327,16 +429,16 @@ function PurchaseModal({
                                 <div className="text-indigo-900/60">Sefer</div><div>{detail.trip ?? '-'}</div>
                                 <div className="text-indigo-900/60">Güzergâh</div><div>{detail.terminal_from} → {detail.terminal_to}</div>
                                 <div className="text-indigo-900/60">Kalkış</div><div>{fmtTR(detail.departure_time)}</div>
-                                <div className="text-indigo-900/60">Adet</div><div>{qty}</div>
+                                <div className="text-indigo-900/60">Adet</div><div>{seats.length || 0}</div>
                                 <div className="text-indigo-900/60">Koltuk</div><div>{seats.length ? seats.join(', ') : '—'}</div>
-                                <div className="text-indigo-900/60">Tutar</div><div className="font-semibold">
-                                {currency.format(Number(detail.cost||0)*seats.length)}
-                            </div>
+                                <div className="text-indigo-900/60">Tutar</div>
+                                <div className="font-semibold">{currency.format(Number(detail.cost||0)*seats.length)}</div>
                             </div>
                             <div className="mt-3 flex items-center justify-end gap-2">
                                 <button className="px-4 py-2 rounded-xl border" onClick={onClose}>Vazgeç</button>
                                 <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white disabled:opacity-50"
-                                        disabled={!canSubmit || submitting} onClick={submit}>
+                                        disabled={!canSubmit || submitting}
+                                        onClick={submit}>
                                     {submitting? 'Gönderiliyor…' : 'Satın Al'}
                                 </button>
                             </div>
