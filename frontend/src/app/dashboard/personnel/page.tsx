@@ -1,96 +1,109 @@
 'use client';
-
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend
 } from 'recharts';
-import { exportCSV, exportJSON } from '@/app/lib/export';
+import { exportCSV } from '@/app/lib/export';
 import { myAppHook } from '../../../../context/AppProvider';
 
 type Stat = {
-    orders:number; revenue:number; active_trips:number; upcoming_trips:number;
+    orders:number;
+    revenue:number;
+    active_trips:number;
+    upcoming_trips:number;
     daily:{ d:string; t:number }[];
 };
 type OrderRow = {
     id:number; pnr:string; created_at:string; qty:number; total:number;
-    passenger_name?:string;
-    product?: { trip?: string; terminal_from:string; terminal_to:string; departure_time:string; cost:number; };
+    product?: { trip?:string; terminal_from:string; terminal_to:string; departure_time:string; cost:number };
 };
-type Paged<T> = { data:T[]; total:number; per_page:number; current_page:number; next_page_url?:string|null; prev_page_url?:string|null; };
 
-const fmtTR = (iso?:string) =>
-    iso ? new Date(iso).toLocaleString('tr-TR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-const fmtTL = (n:any) =>
-    new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 }).format(Number(n||0));
+const fmtTL = (n:any) => new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 }).format(Number(n||0));
 
 export default function Overview(){
-    const { isLoading, token } = myAppHook() as any;
-
+    const { token, isLoading } = (myAppHook() as any) || {};
     const [stats,setStats]=useState<Stat|null>(null);
-    const [orders,setOrders]=useState<Paged<OrderRow>|null>(null);
-    const [err,setErr]=useState<string>('');
+    const [orders,setOrders]=useState<OrderRow[]>([]);
     const [loading,setLoading]=useState(true);
 
-    // orders pagination
-    const [oPage,setOPage]=useState(1);
-    const [oPerPage,setOPerPage]=useState(10);
+    // axios tabanı
+    useEffect(()=>{
+        const baseFromEnv = (process.env.NEXT_PUBLIC_API_URL||'http://127.0.0.1:8000').replace(/\/+$/,'') + '/api';
+        if(!axios.defaults.baseURL) axios.defaults.baseURL = baseFromEnv;
+        axios.defaults.withCredentials = true;
+    },[]);
 
-    const load = async (page=oPage, perPage=oPerPage) => {
-        if (isLoading || !token) return;
-        setLoading(true); setErr('');
-        try{
-            const [sRes, oRes] = await Promise.all([
-                axios.get('/personnel/stats', { headers:{ Authorization:`Bearer ${token}` } }),
-                axios.get('/personnel/orders', { params:{ page, per_page: perPage }, headers:{ Authorization:`Bearer ${token}` } })
-            ]);
+    // helper: GET (Bearer varsa ekle)
+    const get = <T=any,>(path:string) =>
+        axios.get<T>(path, token ? { headers:{ Authorization:`Bearer ${token}` } } : undefined);
 
-            setStats(sRes.data as Stat);
+    // normalize
+    const normOverview = (raw:any, dailyFallback:{d:string;t:number}[]=[]):Stat => ({
+        orders: Number(raw?.orders ?? raw?.order_count ?? 0),
+        revenue: Number(raw?.revenue ?? raw?.total_revenue ?? 0),
+        active_trips: Number(raw?.active_trips ?? raw?.active ?? 0),
+        upcoming_trips: Number(raw?.upcoming_trips ?? raw?.upcoming ?? 0),
+        daily: Array.isArray(raw?.daily)
+            ? raw.daily.map((x:any)=>({ d: String(x.d ?? x.date ?? x.day), t: Number(x.t ?? x.total ?? x.revenue ?? 0) }))
+            : dailyFallback
+    });
 
-            // paginator (api’ye göre esnek)
-            const oData = oRes.data;
-            if (oData?.data && typeof oData?.total === 'number') {
-                setOrders(oData as Paged<OrderRow>);
-            } else if (oData?.orders?.data) {
-                setOrders(oData.orders as Paged<OrderRow>);
-            } else {
-                const rows: OrderRow[] = oData?.orders || oData?.data || [];
-                setOrders({
-                    data: rows.slice(0, perPage),
-                    total: rows.length,
-                    per_page: perPage,
-                    current_page: 1,
-                    next_page_url: null,
-                    prev_page_url: null,
-                });
-            }
-        } catch(e:any){
-            setErr(e?.response?.data?.message || 'Veriler alınamadı');
-        } finally{
-            setLoading(false);
-        }
+    const normTimeseries = (raw:any):{d:string;t:number}[] => {
+        const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+        return arr.map((x:any)=>({ d:String(x.d ?? x.date ?? x.day), t:Number(x.t ?? x.total ?? x.revenue ?? 0) }));
     };
 
-    useEffect(()=>{ if(!isLoading && token) load(1, oPerPage); },[isLoading, token, oPerPage]);
+    useEffect(()=>{
+        if(isLoading) return;
+        let mounted = true;
+        (async ()=>{
+            setLoading(true);
+            try{
+                // 1) timeseries (admin uç)
+                let daily: {d:string;t:number}[] = [];
+                try{
+                    const ts = await get<any>('/admin/dashboard/revenue-timeseries');
+                    daily = normTimeseries(ts.data);
+                }catch{}
 
-    const revenueSeries = useMemo(
-        ()=> (stats?.daily||[]).map(d=>({ date:d.d, revenue:d.t })),
-        [stats?.daily]
-    );
-    const totalPages = useMemo(
-        ()=> Math.max(1, Math.ceil((orders?.total||0)/(orders?.per_page||oPerPage))),
-        [orders, oPerPage]
-    );
+                // 2) overview: admin -> personel fallback
+                let ov: Stat|null = null;
+                try{
+                    const r = await get<any>('/admin/dashboard/overview');
+                    ov = normOverview(r.data, daily);
+                }catch(e:any){
+                    // personel fallback
+                    try{
+                        const r2 = await get<any>('/personnel/stats');
+                        ov = normOverview(r2.data, daily);
+                    }catch{}
+                }
+                if(!ov) ov = { orders:0, revenue:0, active_trips:0, upcoming_trips:0, daily };
 
-    if (isLoading) return <div className="p-6">Yükleniyor…</div>;
-    if (!token)     return <div className="p-6">Lütfen giriş yapın.</div>;
-    if (err)        return <div className="p-6 text-red-600">{err}</div>;
+                // 3) son siparişler
+                let lastOrders:OrderRow[] = [];
+                try{
+                    const o = await get<any>('/orders?per_page=5');
+                    const list = Array.isArray(o.data?.data) ? o.data.data : Array.isArray(o.data) ? o.data : [];
+                    lastOrders = list as OrderRow[];
+                }catch{}
+
+                if(mounted){
+                    setStats(ov);
+                    setOrders(lastOrders);
+                }
+            } finally{
+                if(mounted) setLoading(false);
+            }
+        })();
+        return ()=>{ mounted=false; };
+    },[isLoading, token]);
 
     return (
-        <div className="space-y-6 text-indigo-900">
+        <div className="space-y-6">
             <h1 className="text-2xl font-bold text-indigo-900">Genel Bakış</h1>
 
-            {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <Card title="Sipariş" value={stats?.orders ?? 0}/>
                 <Card title="Gelir" value={fmtTL(stats?.revenue ?? 0)}/>
@@ -98,25 +111,24 @@ export default function Overview(){
                 <Card title="Yaklaşan" value={stats?.upcoming_trips ?? 0}/>
             </div>
 
-            {/* Chart */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 <div className="xl:col-span-2 rounded-2xl border bg-white p-4">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between">
                         <h2 className="font-semibold text-indigo-900">Son 7 Gün Gelir</h2>
-                        <div className="flex gap-2">
-                            <button
-                                className="px-3 py-1 rounded-lg border"
-                                onClick={()=>{
-                                    const rows = (stats?.daily||[]).map(d=>({ Tarih:d.d, Gelir:d.t }));
-                                    exportCSV('son7gun_gelir', rows, [{key:'Tarih', title:'Tarih'}, {key:'Gelir', title:'Gelir'}]);
-                                }}
-                            >CSV</button>
-                            <button className="px-3 py-1 rounded-lg border" onClick={()=>exportJSON('son7gun_gelir', stats?.daily||[])}>JSON</button>
-                        </div>
+                        <button
+                            className="px-3 py-1 rounded-lg border text-indigo-900"
+                            onClick={()=>{
+                                const rows = (stats?.daily||[]).map(d=>({ tarih:d.d, gelir:d.t }));
+                                exportCSV('son7gun_gelir', rows, [
+                                    { key:'tarih', title:'Tarih' },
+                                    { key:'gelir', title:'Gelir' },
+                                ]);
+                            }}
+                        >CSV</button>
                     </div>
                     <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={revenueSeries}>
+                            <LineChart data={(stats?.daily||[]).map(d=>({ date:d.d, revenue:d.t }))}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="date" />
                                 <YAxis />
@@ -127,20 +139,11 @@ export default function Overview(){
                         </ResponsiveContainer>
                     </div>
                 </div>
-
-                {/* Quick Stats (opsiyonel alan) */}
-                <div className="rounded-2xl border bg-white p-4 space-y-2">
-                    <Info label="Günlük Ortalama" value={fmtTL(avg((stats?.daily||[]).map(x=>x.t)))} />
-                    <Info label="Haftalık Toplam" value={fmtTL(sum((stats?.daily||[]).map(x=>x.t)))} />
-                    <Info label="Zirve Gün" value={peakDay(stats?.daily)} />
-                </div>
             </div>
-
         </div>
     );
 }
 
-/* UI helpers */
 function Card({title,value}:{title:string;value:any}){
     return (
         <div className="rounded-2xl border bg-white p-4">
@@ -148,19 +151,4 @@ function Card({title,value}:{title:string;value:any}){
             <div className="text-2xl font-bold text-indigo-900">{value}</div>
         </div>
     );
-}
-function Info({label,value}:{label:string;value:any}){
-    return (
-        <div className="rounded-xl border p-3">
-            <div className="text-xs text-indigo-900/60">{label}</div>
-            <div className="font-semibold">{value}</div>
-        </div>
-    );
-}
-function avg(arr:number[]){ if(!arr.length) return 0; return arr.reduce((a,b)=>a+b,0)/arr.length; }
-function sum(arr:number[]){ return arr.reduce((a,b)=>a+b,0); }
-function peakDay(d?:{d:string;t:number}[]){
-    if(!d?.length) return '-';
-    const max = d.reduce((m,x)=> x.t>m.t? x:m, d[0]);
-    return `${max.d} (${fmtTL(max.t)})`;
 }

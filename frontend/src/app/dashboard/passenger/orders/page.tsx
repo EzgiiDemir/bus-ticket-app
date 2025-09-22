@@ -1,96 +1,83 @@
+// app/dashboard/passenger/orders/page.tsx
 'use client';
+
 import { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
-import { useRouter } from 'next/navigation';
+import { api } from '@/app/lib/api';
+import { myAppHook } from '../../../../../context/AppProvider';
 import { fmtTR } from '@/app/lib/datetime';
 import { exportCSV, exportJSON } from '@/app/lib/export';
-import { myAppHook } from '../../../../../context/AppProvider';
 
+/* ---- Types ---- */
 type Order = {
     id:number; qty:number; unit_price:number; total:number; pnr:string; created_at:string;
-    product:{ id:number; trip?:string; terminal_from?:string; terminal_to?:string; departure_time?:string; cost?:number };
+    product?: { id:number; trip?:string; terminal_from?:string; terminal_to?:string; departure_time?:string; cost?:number };
+};
+type PageLike<T> =
+    | { data:T[]; total?:number; next_page_url?:string|null; prev_page_url?:string|null; meta?:any; links?:any }
+    | { orders:T[]; total?:number; next_page_url?:string|null; prev_page_url?:string|null; meta?:any; links?:any }
+    | T[];
+
+/* ---- Helpers (dashboard ile aynı mantık) ---- */
+const TRYc = new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:2});
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL||'').replace(/\/+$/,'');
+
+const toPath = (u?:string|null) => {
+    if(!u) return null;
+    if(u.startsWith('/')) return u;
+    try { const url = new URL(u); return url.pathname + url.search; }
+    catch { return API_BASE && u.startsWith(API_BASE) ? u.slice(API_BASE.length) : u; }
 };
 
-type Page<T> = {
-    data:T[];
-    current_page?:number; last_page?:number; per_page?:number; total?:number;
-    next_page_url?:string|null; prev_page_url?:string|null;
-};
+function pickRows<T=any>(raw:any): { rows:T[]; total:number; next:string|null; prev:string|null }{
+    if(!raw) return { rows:[], total:0, next:null, prev:null };
+    if(Array.isArray(raw)){
+        return { rows:raw, total:raw.length, next:null, prev:null };
+    }
+    const rows: T[] =
+        Array.isArray(raw.data)    ? raw.data :
+            Array.isArray(raw.orders)  ? raw.orders :
+                [];
+    const total =
+        Number(raw.total ?? raw?.meta?.total ?? rows.length);
+    const next  = raw.next_page_url ?? raw?.meta?.next_page_url ?? raw?.links?.next ?? null;
+    const prev  = raw.prev_page_url ?? raw?.meta?.prev_page_url ?? raw?.links?.prev ?? null;
+    return { rows, total, next, prev };
+}
 
-const PER_PAGE = 10;
+/* ---- Page ---- */
+export default function Page(){
+    const { token, isLoading } = (myAppHook() as any) || {};
 
-export default function PassengerOrders(){
-    const router = useRouter();
-    const { token, isLoading } = myAppHook() as any;
+    const [items,setItems] = useState<PageLike<Order>|null>(null);
+    const [q,setQ] = useState('');
+    const [perPage,setPerPage] = useState(10);
+    const [loading,setLoading] = useState(false);
+    const [err,setErr] = useState('');
 
-    const [items,setItems]=useState<Page<Order>|null>(null);
-    const [q,setQ]=useState('');
-    const [page,setPage]=useState(1);
-    const [loading,setLoading]=useState(false);
-    const [err,setErr]=useState('');
-
-    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
-
-    const loadByUrl = async (url:string)=>{
-        setLoading(true);
+    const load = async (url?:string) => {
+        if(!token) return;
+        setLoading(true); setErr('');
         try{
-            const { data } = await axios.get<Page<Order>>(url, { headers: authHeader });
+            const path = url ? (toPath(url) as string) : '/orders';
+            const res = await api.get(path, { token, params: url ? undefined : { per_page: perPage } });
+            const data = await api.json<PageLike<Order>>(res);
             setItems(data);
-            setPage(data.current_page ?? page);
-            setErr('');
-        }catch(e:any){
-            handleErr(e);
-        }finally{ setLoading(false); }
-    };
-
-    const loadPage = async (p:number)=>{
-        setLoading(true);
-        try{
-            const { data } = await axios.get<Page<Order>>('/orders', {
-                headers: authHeader,
-                params: { page: p, per_page: PER_PAGE },
-            });
-            setItems(data);
-            setPage(data.current_page ?? p);
-            setErr('');
-        }catch(e:any){
-            handleErr(e);
-        }finally{ setLoading(false); }
-    };
-
-    const handleErr=(e:any)=>{
-        if (e?.response?.status === 401){
-            setErr('Oturum doğrulanamadı. Giriş yapın.');
-            router.push('/auth?mode=login');
-        }else{
-            setErr(e?.response?.data?.message || 'Listeleme hatası');
+        } catch(e:any){
+            setErr(e?.message || 'Veri alınamadı');
+        } finally{
+            setLoading(false);
         }
     };
 
-    useEffect(()=>{
-        if (isLoading) return;
-        if (!token){ router.push('/auth?mode=login'); return; }
-        loadPage(1);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    },[token, isLoading]);
+    useEffect(()=>{ if(!isLoading && token) load(); },[isLoading, token, perPage]);
 
-    const rows = items?.data ?? [];
+    const { rows, total, next, prev } = useMemo(()=> pickRows<Order>(items as any), [items]);
+
     const filtered = useMemo(()=>{
-        const s=q.trim().toLowerCase();
+        const s = q.trim().toLowerCase();
         if(!s) return rows;
-        return rows.filter(o=> JSON.stringify(o).toLowerCase().includes(s));
+        return rows.filter(o => JSON.stringify(o).toLowerCase().includes(s));
     },[rows,q]);
-
-    const lastPage =
-        items?.last_page
-        ?? (items?.total && (items as any).per_page
-            ? Math.max(1, Math.ceil((items.total as number)/((items as any).per_page as number)))
-            : undefined);
-
-    const goFirst = ()=> lastPage ? loadPage(1) : items?.prev_page_url ? loadByUrl(items.prev_page_url.replace(/page=\d+/, 'page=1')) : loadPage(1);
-    const goPrev  = ()=> items?.prev_page_url ? loadByUrl(items.prev_page_url) : loadPage(Math.max(1, page-1));
-    const goNext  = ()=> items?.next_page_url ? loadByUrl(items.next_page_url) : loadPage(lastPage ? Math.min(lastPage, page+1) : page+1);
-    const goLast  = ()=> lastPage ? loadPage(lastPage) : undefined;
 
     const cols = [
         { key:'pnr', title:'PNR' },
@@ -103,29 +90,23 @@ export default function PassengerOrders(){
         { key:'created_at', title:'Sipariş Tarihi', map:(o:Order)=>fmtTR(o.created_at) },
     ];
 
-    const exportAll = async ()=>{
-        if (!token){ router.push('/auth?mode=login'); return; }
-        try{
-            const all:Order[] = [];
-            // ilk sayfadan başlayıp sırayla getir
-            let url = `/orders?page=1&per_page=${PER_PAGE}`;
-            // döngü: next_page_url varsa onu kullan
-            for(;;){
-                const { data } = await axios.get<Page<Order>>(url, { headers: authHeader });
-                all.push(...(data?.data ?? []));
-                if (data?.next_page_url){ url = data.next_page_url; }
-                else break;
-            }
-            exportCSV('siparislerim_tumu.csv', all, cols as any);
-        }catch(e:any){
-            alert(e?.response?.data?.message || 'Dışa aktarma hatası');
+    const exportAll = async () => {
+        if(!token) return;
+        const out: Order[] = [];
+        let url: string | null = `/orders?per_page=100`;
+        for(let i=0;i<200;i++){
+            const res = await api.get(url, { token });
+            const data = await api.json<any>(res);
+            const { rows, next } = pickRows<Order>(data);
+            out.push(...rows);
+            url = toPath(next||'');
+            if(!url) break;
         }
+        exportCSV('siparislerim_tumu', out, cols as any);
     };
 
-    const currency = useMemo(
-        () => new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 }),
-        []
-    );
+    if(isLoading) return <div className="p-6">Yükleniyor…</div>;
+    if(!token)   return <div className="p-6">Giriş yapın.</div>;
 
     return (
         <div className="space-y-4 text-indigo-900">
@@ -139,14 +120,15 @@ export default function PassengerOrders(){
                         onChange={e=>setQ(e.target.value)}
                     />
                     <div className="flex gap-2">
-                        <button className="px-3 py-2 rounded-lg border" onClick={exportAll} disabled={loading}>CSV (tümü)</button>
-                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('siparisler.json', filtered)} disabled={loading}>JSON (bu sayfa)</button>
+                        <select className="rounded-lg border px-2" value={perPage} onChange={e=>setPerPage(Number(e.target.value))}>
+                            {[5,10,20,50,100].map(n=><option key={n} value={n}>{n}/sayfa</option>)}
+                        </select>
+                        <button className="px-3 py-2 rounded-lg border" onClick={exportAll}>CSV</button>
+                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('siparisler.json', filtered)}>JSON</button>
+                        <button className="px-3 py-2 rounded-lg border" onClick={()=>load()}>Yenile</button>
                     </div>
                 </div>
             </div>
-
-            {err && <div className="rounded-xl border border-red-300 bg-red-50 text-red-700 p-3 text-sm">{err}</div>}
-            {loading && <div className="text-sm text-indigo-900/60">Yükleniyor…</div>}
 
             <div className="rounded-2xl border bg-white p-4 overflow-x-auto">
                 <table className="min-w-[900px] w-full text-sm">
@@ -163,26 +145,34 @@ export default function PassengerOrders(){
                             <td>{o.product?.terminal_from} → {o.product?.terminal_to}</td>
                             <td>{fmtTR(o.product?.departure_time)}</td>
                             <td>{o.qty}</td>
-                            <td>{currency.format(Number(o.unit_price||0))}</td>
-                            <td className="font-semibold">{currency.format(Number(o.total||0))}</td>
+                            <td>{TRYc.format(Number(o.unit_price||0))}</td>
+                            <td className="font-semibold">{TRYc.format(Number(o.total||0))}</td>
                             <td>{fmtTR(o.created_at)}</td>
                         </tr>
                     ))}
+                    {!filtered.length && (
+                        <tr><td colSpan={8} className="py-6 text-center text-indigo-900/50">{loading?'Yükleniyor…':'Kayıt yok'}</td></tr>
+                    )}
                     </tbody>
                 </table>
 
-                {/* Pagination */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between mt-3">
-                    <div className="text-sm text-indigo-900/60">
-                        Toplam {items?.total ?? rows.length} kayıt • Sayfa {page}{lastPage?`/${lastPage}`:''}
-                    </div>
+                    <div className="text-sm text-indigo-900/60">Toplam {total} kayıt</div>
                     <div className="flex gap-2">
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page<=1} onClick={goFirst}>İlk</button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || !items?.prev_page_url && page<=1} onClick={goPrev}>Geri</button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || (!items?.next_page_url && lastPage!==undefined && page>=lastPage)} onClick={goNext}>İleri</button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || lastPage===undefined || page>=lastPage} onClick={goLast}>Son</button>
+                        <button
+                            disabled={!prev || loading}
+                            onClick={()=> prev && load(prev)}
+                            className="px-3 py-1 rounded-lg border disabled:opacity-50"
+                        >Geri</button>
+                        <button
+                            disabled={!next || loading}
+                            onClick={()=> next && load(next)}
+                            className="px-3 py-1 rounded-lg border disabled:opacity-50"
+                        >İleri</button>
                     </div>
                 </div>
+
+                {!!err && <div className="mt-3 text-sm text-red-600">{err}</div>}
             </div>
         </div>
     );

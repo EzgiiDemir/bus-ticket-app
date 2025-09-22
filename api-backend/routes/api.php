@@ -10,7 +10,6 @@ use App\Http\Controllers\Admin\ApprovalController;
 use App\Models\Company;
 use App\Models\Terminal;
 
-
 Route::prefix('public')
     ->withoutMiddleware(['auth:sanctum'])   // kritik
     ->group(function () {
@@ -20,8 +19,18 @@ Route::prefix('public')
 
 // --- Public ---
 Route::get('/public/products', [ProductController::class, 'publicIndex']);
-Route::get('/public/companies', fn() =>
-response()->json(Company::select('id','name','code')->orderBy('name')->get())
+
+Route::get('/public/companies', fn () =>
+response()->json(
+    Company::select('id','name','code')->orderBy('name')->get()
+)
+);
+
+Route::get('/public/terminals', fn () =>
+response()->json(
+    Terminal::select('id','name','city','code')
+        ->orderBy('city')->orderBy('name')->get()
+)
 );
 
 // --- Auth (genel) ---
@@ -89,12 +98,4 @@ Route::middleware('auth:sanctum')->group(function () {
             ));
         });
     });
-
-    Route::get('/public/terminals', fn() =>
-    response()->json([
-        'terminals' => Terminal::select('id','name','city','code')
-            ->orderBy('city')->orderBy('name')->get()
-    ])
-    );
-
 });

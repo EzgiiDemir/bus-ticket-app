@@ -1,53 +1,55 @@
 // frontend/src/app/lib/api.ts
-export const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+export const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 export const BASE = `${API_ORIGIN}`;
 
 type HeadersInit = Record<string, string>;
+type Opt = { token?: string; params?: Record<string, any>; public?: boolean; headers?: HeadersInit; };
 
-async function parse<T = any>(res: Response): Promise<T> {
-    const ct = res.headers.get("content-type") || "";
-    if (!res.ok) {
-        if (ct.includes("application/json")) throw await res.json();
-        const text = await res.text().catch(() => "");
-        throw { message: text || `HTTP ${res.status}` };
+const qs = (p?: Record<string, any>)=>{
+    if(!p) return "";
+    const s = new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([,v])=>v!==''&&v!=null))).toString();
+    return s?`?${s}`:"";
+};
+
+export async function parse<T=any>(res: Response): Promise<T>{
+    const ct = res?.headers?.get?.('content-type') || '';
+    if(!res?.ok){
+        if(ct.includes('application/json')) throw await res.json();
+        const t = await res.text().catch(()=> '');
+        throw { message: t || `HTTP ${res?.status}` };
     }
-    if (ct.includes("application/json")) return res.json();
-    const text = await res.text().catch(() => "");
+    if(ct.includes('application/json')) return res.json();
     // @ts-ignore
-    return text as T;
+    return (await res.text()) as T;
 }
 
-async function request<T = any>(
-    method: "GET" | "POST" | "PUT" | "DELETE",
-    path: string,
-    body?: any,
-    token?: string
-): Promise<T> {
-    const url = `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
-    const headers: HeadersInit = { Accept: "application/json" };
+const norm = (x?: string|Opt): Opt => typeof x==='string'? {token:x} : (x||{});
+
+async function request(method: 'GET'|'POST'|'PUT'|'DELETE', path: string, body?: any, x?: string|Opt){
+    const opt = norm(x);
+    const url = `${BASE}${path.startsWith('/')?path:`/${path}`}${qs(opt.params)}`;
+    const headers: HeadersInit = { Accept: 'application/json', ...(opt.headers||{}) };
     const init: RequestInit = { method, headers };
 
-    if (body !== undefined) {
-        headers["Content-Type"] = "application/json";
-        init.body = JSON.stringify(body);
+    if(body!==undefined){
+        headers['Content-Type']='application/json';
+        init.body = typeof body==='string'? body : JSON.stringify(body);
     }
 
-    if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-        init.credentials = "same-origin";
-    } else {
-        init.credentials = "include"; // cookie/Sanctum desteği
-    }
+    const isPublic = opt.public ?? /(^|\/)public(\/|$)/.test(path);
+    if(opt.token) headers['Authorization'] = `Bearer ${opt.token}`;
 
-    const res = await fetch(url, init);
-    return parse<T>(res);
+    // PROXY sayesinde origin aynı; yine de cookie gerekecekse include.
+    init.credentials = isPublic ? 'omit' : 'include';
+
+    return fetch(url, init);
 }
 
 export const api = {
     json: parse,
-    get: <T = any>(path: string, token?: string) => request<T>("GET", path, undefined, token),
-    post: <T = any>(path: string, body: any, token?: string) => request<T>("POST", path, body, token),
-    put:  <T = any>(path: string, body: any, token?: string) => request<T>("PUT", path, body, token),
-    delete: <T = any>(path: string, token?: string) => request<T>("DELETE", path, undefined, token),
-    csrf: () => fetch(`${API_ORIGIN}/sanctum/csrf-cookie`, { credentials: "include" }),
+    get:    (p: string, o?: string|Opt)=> request('GET', p, undefined, o),
+    post:   (p: string, b:any, o?: string|Opt)=> request('POST', p, b, o),
+    put:    (p: string, b:any, o?: string|Opt)=> request('PUT', p, b, o),
+    delete: (p: string, o?: string|Opt)=> request('DELETE', p, undefined, o),
+    csrf:   () => fetch(`/api/sanctum/csrf-cookie`, { credentials: 'include' }),
 };

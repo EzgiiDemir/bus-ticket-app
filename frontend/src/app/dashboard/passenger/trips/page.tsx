@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { myAppHook } from '../../../../../context/AppProvider';
+import { fmtTR } from '@/app/lib/datetime';
 import { exportCSV, exportJSON } from '@/app/lib/export';
 
 type Trip = {
@@ -21,212 +22,146 @@ type TripDetail = Trip & {
 };
 type PurchaseResp = { status:boolean; message?:string; order?:any; pnr?:string };
 
-type Page<T> = {
-    data:T[]; current_page?:number; last_page?:number; per_page?:number; total?:number;
-    next_page_url?:string|null; prev_page_url?:string|null;
-};
-
-const PER_PAGE = 10;
-const fmtTR = (iso?:string) =>
-    iso ? new Date(iso).toLocaleString('tr-TR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-
 export default function PassengerTrips(){
     const router = useRouter();
-    const { isLoading, token } = myAppHook() as any;
+    const { token, isLoading } = myAppHook() as any;
 
-    const [pageData,setPageData] = useState<Page<Trip>|null>(null);
-    const [page,setPage] = useState(1);
-    const [q,setQ] = useState('');
-    const [loading,setLoading] = useState(false);
-    const [err,setErr] = useState('');
+    const [rows,setRows]=useState<Trip[]>([]);
+    const [q,setQ]=useState('');
+    const [page,setPage]=useState(1);
+    const pageSize=10;
 
     const [open,setOpen]=useState(false);
+    const [loading,setLoading]=useState(false);
     const [detail,setDetail]=useState<TripDetail|null>(null);
-    const [submitting,setSubmitting]=useState(false);
 
-    const currency = useMemo(
-        ()=> new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:2}),[]
-    );
+    // canlı geri sayım için
+    const [now, setNow] = useState<number>(Date.now());
+    useEffect(()=>{
+        const t = setInterval(()=> setNow(Date.now()), 30_000);
+        return ()=> clearInterval(t);
+    },[]);
 
-    // --- public/products her iki şekle de uyumlu yükleyici ---
-    const normalizeToPage = (res:any, p:number): Page<Trip> => {
-        // 1) {status:true, products:[...]} (senin publicIndex)
-        if (res?.status === true && Array.isArray(res?.products)) {
-            const all:Trip[] = res.products;
-            const start = (p-1)*PER_PAGE;
-            const slice = all.slice(start, start+PER_PAGE);
-            return {
-                data: slice,
-                total: all.length,
-                per_page: PER_PAGE,
-                current_page: p,
-                last_page: Math.max(1, Math.ceil(all.length/PER_PAGE)),
-                next_page_url: null,
-                prev_page_url: null,
-            };
-        }
-        // 2) {data:[...], total, per_page, current_page, ...} (Laravel paginator)
-        if (Array.isArray(res?.data) && (typeof res?.total === 'number' || typeof res?.per_page === 'number')) {
-            return res as Page<Trip>;
-        }
-        // 3) Düz dizi
-        if (Array.isArray(res)) {
-            const all:Trip[] = res;
-            const start = (p-1)*PER_PAGE;
-            const slice = all.slice(start, start+PER_PAGE);
-            return {
-                data: slice,
-                total: all.length,
-                per_page: PER_PAGE,
-                current_page: p,
-                last_page: Math.max(1, Math.ceil(all.length/PER_PAGE)),
-                next_page_url: null,
-                prev_page_url: null,
-            };
-        }
-        // 4) Güvenli varsayılan
-        return { data: [], total: 0, per_page: PER_PAGE, current_page: 1, last_page: 1, next_page_url: null, prev_page_url: null };
+    useEffect(()=>{
+        axios.get('/public/products')
+            .then(r=> setRows(r.data?.products||[]))
+            .catch(()=> setRows([]));
+    },[]);
+
+    const minutesLeft = (dt:string)=>{
+        const s = dt.includes('T')? dt : dt.replace(' ','T');
+        const t = new Date(s).getTime();
+        return Math.floor((t - now)/60000);
     };
 
-    const loadByUrl = async (url:string)=>{
-        setLoading(true);
-        try{
-            const { data } = await axios.get(url);
-            setPageData(normalizeToPage(data, page));
-            setPage((data?.current_page ?? page) || 1);
-            setErr('');
-        }catch(e:any){
-            setErr(e?.response?.data?.message || 'Seferler alınamadı');
-        }finally{ setLoading(false); }
-    };
-
-    const loadPage = async (p:number)=>{
-        setLoading(true);
-        try{
-            const { data } = await axios.get('/public/products', { params: { page: p, per_page: PER_PAGE } });
-            setPageData(normalizeToPage(data, p));
-            setPage(p);
-            setErr('');
-        }catch(e:any){
-            setErr(e?.response?.data?.message || 'Seferler alınamadı');
-        }finally{ setLoading(false); }
-    };
-
-    useEffect(()=>{ loadPage(1); },[]);
-
-    const rows = pageData?.data ?? [];
     const filtered = useMemo(()=>{
         const s=q.trim().toLowerCase();
-        if(!s) return rows;
-        return rows.filter(r=> JSON.stringify(r).toLowerCase().includes(s));
+        return s? rows.filter(r=>JSON.stringify(r).toLowerCase().includes(s)) : rows;
     },[rows,q]);
 
-    const lastPage =
-        pageData?.last_page
-        ?? (pageData?.total && pageData?.per_page
-            ? Math.max(1, Math.ceil((pageData.total as number)/(pageData.per_page as number)))
-            : 1);
+    const closingSoon = useMemo(()=> filtered.filter(r=>{
+        const m = minutesLeft(r.departure_time);
+        return m>0 && m<=60;
+    }),[filtered, now]);
 
-    const goFirst = ()=> loadPage(1);
-    const goPrev  = ()=> pageData?.prev_page_url ? loadByUrl(pageData.prev_page_url) : loadPage(Math.max(1, page-1));
-    const goNext  = ()=> pageData?.next_page_url ? loadByUrl(pageData.next_page_url) : loadPage(Math.min(lastPage, page+1));
-    const goLast  = ()=> loadPage(lastPage);
+    const totalPages = Math.max(1, Math.ceil(filtered.length/pageSize));
+    const pageRows = filtered.slice((page-1)*pageSize, page*pageSize);
+    const currency = useMemo(()=> new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:2}),[]);
 
-    // --- Detail (public detail yoksa /products/:id'e düş) ---
+    const cols = [
+        { key:'trip', title:'Sefer' },
+        { key:'company_name', title:'Firma' },
+        { key:'route', title:'Güzergâh', map:(r:Trip)=>`${r.terminal_from} → ${r.terminal_to}` },
+        { key:'departure_time', title:'Kalkış', map:(r:Trip)=>fmtTR(r.departure_time) },
+        { key:'cost', title:'Ücret', map:(r:Trip)=>currency.format(Number(r.cost||0)) },
+        { key:'duration', title:'Süre' },
+        { key:'bus_type', title:'Otobüs Tipi' },
+    ];
+
     const openDetail = async (id:number)=>{
+        if (isLoading) return;
         setLoading(true);
         try{
-            let data: any;
-            try {
-                ({ data } = await axios.get(`/public/products/${id}`));
-            } catch {
-                ({ data } = await axios.get(`/products/${id}`)); // fallback
-            }
-            const rowsCount = data?.seat_map?.rows ?? 12;
-            const layout = data?.seat_map?.layout || data?.bus_type || '2+1';
-            setDetail({ ...data, seat_map:{ rows: rowsCount, layout }, taken_seats: data.taken_seats || [] });
+            const { data } = await axios.get(`/public/products/${id}`);
+            const rows = data.seat_map?.rows ?? 12;
+            const layout = data.seat_map?.layout || data.bus_type || '2+1';
+            setDetail({ ...data, seat_map:{ rows, layout }, taken_seats: data.taken_seats || [] });
             setOpen(true);
         } catch(e:any){
             alert(e?.response?.data?.message || 'Sefer bulunamadı');
         } finally { setLoading(false); }
     };
 
-    // --- Purchase (auth required) ---
-    const purchase = async (payload:any)=>{
-        if (isLoading) return;
-        if (!token) { router.push('/auth?mode=login'); return; }
-        setSubmitting(true);
-        try{
-            const { data } = await axios.post<PurchaseResp>('/orders', payload, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (data?.status) {
-                alert(`PNR: ${data.pnr || ''}`);
-                setOpen(false); setDetail(null);
-                router.push('/dashboard/passenger');
-            } else {
-                alert(data?.message || 'Satın alma başarısız');
-            }
-        } catch(e:any){
-            const m = e?.response?.data?.message
-                || (e?.response?.data?.errors && Object.values(e.response.data.errors).flat().join('\n'))
-                || 'Satın alma hatası';
-            alert(m);
-        } finally { setSubmitting(false); }
+    const DisableBadge = ({m}:{m:number})=>{
+        if(m<=0) return <span className="text-xs px-2 py-1 rounded-lg bg-red-100 text-red-700 border border-red-200">Kapandı</span>;
+        if(m<=60) return <span className="text-xs px-2 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200">Son {m} dk</span>;
+        return null;
     };
+
+    const isInactive = (r:Trip)=> r.is_active===0 || r.is_active===false;
 
     return (
         <div className="space-y-4 text-indigo-900">
+            {/* Kapanmak üzere bildirim kutusu */}
+            {closingSoon.length>0 && (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3">
+                    <div className="font-semibold text-amber-900">Son 1 saate kalan {closingSoon.length} sefer var.</div>
+                    <ul className="mt-1 text-sm text-amber-900/90 list-disc ml-5">
+                        {closingSoon.slice(0,5).map(r=>{
+                            const m = minutesLeft(r.departure_time);
+                            return <li key={r.id}>{r.trip || `${r.terminal_from} → ${r.terminal_to}`} • {fmtTR(r.departure_time)} • {m} dk kaldı</li>;
+                        })}
+                    </ul>
+                </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-bold text-indigo-900">Sefer Ara</h1>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                        className="w-full sm:w-64 rounded-xl border px-3 py-2"
-                        placeholder="Ara (şehir, firma...)"
-                        value={q}
-                        onChange={e=>setQ(e.target.value)}
-                    />
+                    <input className="w-full sm:w-64 rounded-xl border px-3 py-2" placeholder="Ara (şehir, firma...)"
+                           value={q} onChange={e=>{ setPage(1); setQ(e.target.value); }}/>
                     <div className="flex gap-2">
-                        <button
-                            className="px-3 py-2 rounded-lg border"
-                            onClick={()=>exportCSV('seferler', rows, [
-                                { key:'trip', title:'Sefer' },
-                                { key:'company_name', title:'Firma' },
-                                { key:'route', title:'Güzergâh', map:(r:Trip)=>`${r.terminal_from} → ${r.terminal_to}` },
-                                { key:'departure_time', title:'Kalkış', map:(r:Trip)=>fmtTR(r.departure_time) },
-                                { key:'cost', title:'Ücret', map:(r:Trip)=>currency.format(Number(r.cost||0)) },
-                                { key:'duration', title:'Süre' },
-                                { key:'bus_type', title:'Otobüs Tipi' },
-                            ] as any)}
-                        >CSV</button>
-                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('seferler', rows)}>JSON</button>
+                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportCSV('seferler', filtered, cols as any)}>CSV</button>
+                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('seferler', filtered)}>JSON</button>
                     </div>
                 </div>
             </div>
 
-            {err && <div className="rounded-xl border border-red-300 bg-red-50 text-red-700 p-3 text-sm">{err}</div>}
-            {loading && <div className="text-sm text-indigo-900/60">Yükleniyor…</div>}
-
             {/* Mobil */}
             <div className="md:hidden space-y-3">
-                {filtered.map(r=>(
-                    <div key={r.id} className="rounded-2xl border bg-white p-4">
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="font-semibold">{r.trip ?? '-'}</div>
-                            <span className="text-xs px-2 py-1 rounded-lg border">{r.company_name ?? '-'}</span>
+                {pageRows.map(r=>{
+                    const m = minutesLeft(r.departure_time);
+                    const closed = m<=0 || isInactive(r);
+                    const disable = closed || m<=60; // son 1 saatte kapat
+                    return (
+                        <div key={r.id} className={`rounded-2xl border bg-white p-4 ${disable?'opacity-75':''}`}>
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="font-semibold">{r.trip ?? '-'}</div>
+                                <div className="flex items-center gap-2">
+                                    <DisableBadge m={m}/>
+                                    <span className="text-xs px-2 py-1 rounded-lg border">{r.company_name ?? '-'}</span>
+                                </div>
+                            </div>
+                            <div className="mt-2 text-sm grid grid-cols-2 gap-y-1">
+                                <div className="text-indigo-900/60">Güzergâh</div><div>{r.terminal_from} → {r.terminal_to}</div>
+                                <div className="text-indigo-900/60">Kalkış</div><div>{fmtTR(r.departure_time)}</div>
+                                <div className="text-indigo-900/60">Ücret</div><div>{currency.format(Number(r.cost||0))}</div>
+                                <div className="text-indigo-900/60">Süre</div><div>{r.duration ?? '-'}</div>
+                                <div className="text-indigo-900/60">Otobüs</div><div>{r.bus_type ?? '-'}</div>
+                            </div>
+                            <div className="mt-3 flex justify-end">
+                                <button
+                                    className={`px-3 py-2 rounded-lg ${disable?'bg-gray-300 text-gray-600 cursor-not-allowed':'bg-indigo-600 text-white'}`}
+                                    disabled={disable}
+                                    title={closed? 'Satış kapalı' : (m<=60? 'Son 1 saat. Satış durduruldu':'Satın al')}
+                                    onClick={()=>!disable && openDetail(r.id)}
+                                >
+                                    {closed? 'Satış Kapalı' : (m<=60? 'Kapanıyor' : 'Satın Al')}
+                                </button>
+                            </div>
                         </div>
-                        <div className="mt-2 text-sm grid grid-cols-2 gap-y-1">
-                            <div className="text-indigo-900/60">Güzergâh</div><div>{r.terminal_from} → {r.terminal_to}</div>
-                            <div className="text-indigo-900/60">Kalkış</div><div>{fmtTR(r.departure_time)}</div>
-                            <div className="text-indigo-900/60">Ücret</div><div>{currency.format(Number(r.cost||0))}</div>
-                            <div className="text-indigo-900/60">Süre</div><div>{r.duration ?? '-'}</div>
-                            <div className="text-indigo-900/60">Otobüs</div><div>{r.bus_type ?? '-'}</div>
-                        </div>
-                        <div className="mt-3 flex justify-end">
-                            <button className="px-3 py-2 rounded-lg bg-indigo-600 text-white" onClick={()=>openDetail(r.id)}>Satın Al</button>
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {/* Desktop */}
@@ -238,46 +173,58 @@ export default function PassengerTrips(){
                     </tr>
                     </thead>
                     <tbody>
-                    {filtered.map(r=>(
-                        <tr key={r.id} className="border-t">
-                            <td className="py-2 font-medium">{r.trip ?? '-'}</td>
-                            <td>{r.company_name ?? '-'}</td>
-                            <td>{r.terminal_from} → {r.terminal_to}</td>
-                            <td>{fmtTR(r.departure_time)}</td>
-                            <td>{currency.format(Number(r.cost||0))}</td>
-                            <td>{r.duration ?? '-'}</td>
-                            <td>{r.bus_type ?? '-'}</td>
-                            <td className="text-right">
-                                <button className="px-3 py-2 rounded-lg border" onClick={()=>openDetail(r.id)}>Satın Al</button>
-                            </td>
-                        </tr>
-                    ))}
+                    {pageRows.map(r=>{
+                        const m = minutesLeft(r.departure_time);
+                        const closed = m<=0 || isInactive(r);
+                        const disable = closed || m<=60;
+                        return (
+                            <tr key={r.id} className={`border-t ${disable?'opacity-70':''}`}>
+                                <td className="py-2 font-medium flex items-center gap-2">
+                                    {r.trip ?? '-'}
+                                    <DisableBadge m={m}/>
+                                </td>
+                                <td>{r.company_name ?? '-'}</td>
+                                <td>{r.terminal_from} → {r.terminal_to}</td>
+                                <td>{fmtTR(r.departure_time)}</td>
+                                <td>{currency.format(Number(r.cost||0))}</td>
+                                <td>{r.duration ?? '-'}</td>
+                                <td>{r.bus_type ?? '-'}</td>
+                                <td className="text-right">
+                                    <button
+                                        className={`px-3 py-2 rounded-lg border ${disable?'opacity-50 cursor-not-allowed':''}`}
+                                        disabled={disable}
+                                        title={closed? 'Satış kapalı' : (m<=60? 'Son 1 saat. Satış durduruldu':'Satın al')}
+                                        onClick={()=>!disable && openDetail(r.id)}
+                                    >
+                                        {closed? 'Satış Kapalı' : (m<=60? 'Kapanıyor' : 'Satın Al')}
+                                    </button>
+                                </td>
+                            </tr>
+                        );
+                    })}
                     </tbody>
                 </table>
 
-                {/* Pagination */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between mt-3">
-                    <div className="text-sm text-indigo-900/60">
-                        Toplam {pageData?.total ?? rows.length} kayıt • Sayfa {page}/{lastPage}
-                    </div>
+                    <div className="text-sm text-indigo-900/60">Toplam {filtered.length} kayıt • Sayfa {page}/{totalPages}</div>
                     <div className="flex gap-2">
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page<=1} onClick={goFirst}>İlk</button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page<=1} onClick={goPrev}>Geri</button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page>=lastPage} onClick={goNext}>İleri</button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={loading || page>=lastPage} onClick={goLast}>Son</button>
+                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Geri</button>
+                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>İleri</button>
                     </div>
                 </div>
             </div>
 
             {open && detail && (
-                <PurchaseModal
-                    detail={detail}
-                    onClose={()=>{ setOpen(false); setDetail(null); }}
-                    onPurchased={(pnr)=>{ alert(`PNR: ${pnr}`); setOpen(false); setDetail(null); router.push('/dashboard/passenger'); }}
-                    submitting={submitting}
-                    onPurchase={purchase}
-                />
+                <PurchaseModal detail={detail}
+                               onClose={()=>{ setOpen(false); setDetail(null); }}
+                               onPurchased={(pnr)=>{
+                                   setOpen(false); setDetail(null);
+                                   alert(`PNR: ${pnr}`);
+                                   router.push('/dashboard/passenger');
+                               }}/>
             )}
+
+            {loading && <div className="fixed inset-0 bg-black/20 grid place-items-center text-white">Yükleniyor…</div>}
         </div>
     );
 }
@@ -285,8 +232,11 @@ export default function PassengerTrips(){
 /* ---------------- Modal + SeatMap ---------------- */
 
 function PurchaseModal({
-                           detail, onClose, onPurchased, submitting, onPurchase
-                       }:{ detail:TripDetail; onClose:()=>void; onPurchased:(pnr:string)=>void; submitting:boolean; onPurchase:(payload:any)=>Promise<void> }){
+                           detail, onClose, onPurchased
+                       }:{ detail:TripDetail; onClose:()=>void; onPurchased:(pnr:string)=>void }){
+    const router = useRouter();
+    const { token, isLoading } = myAppHook() as any;
+
     const layout = (detail.seat_map?.layout || detail.bus_type || '2+1') as '2+1'|'2+2';
     const rows = detail.seat_map?.rows ?? 12;
 
@@ -294,34 +244,66 @@ function PurchaseModal({
     const [seats,setSeats]=useState<string[]>([]);
     const [passenger,setPassenger]=useState({ first_name:'', last_name:'', doc_type:'tc', national_id:'', passport_no:'', nationality:'TR', email:'', phone:'' });
     const [payment,setPayment]=useState({ card_holder:'', card_number:'', card_exp:'', card_cvv:'' });
+    const [submitting,setSubmitting]=useState(false);
 
     const taken = useMemo(()=> new Set(detail.taken_seats||[]),[detail.taken_seats]);
+    const price = useMemo(()=> Number(detail.cost||0) * seats.length, [detail.cost, seats.length]);
     const canSubmit = seats.length===qty
         && (passenger.doc_type==='tc' ? passenger.national_id.trim() : passenger.passport_no.trim())
         && passenger.first_name.trim() && passenger.last_name.trim()
-        && (passenger.first_name + ' ' + passenger.last_name).trim().length>1
-        && payment.card_number.replace(/\s+/g,'').length>=12
+        && payment.card_holder.trim() && payment.card_number.replace(/\s+/g,'').length>=12
         && /\d{2}\/\d{2}/.test(payment.card_exp) && payment.card_cvv.length>=3;
 
+    // Modal da kapanış kuralı: son 1 saatte satın alma kapalı
+    const minsLeft = useMemo(()=>{
+        const s = detail.departure_time.includes('T')? detail.departure_time : detail.departure_time.replace(' ','T');
+        return Math.floor((new Date(s).getTime() - Date.now())/60000);
+    },[detail.departure_time]);
+    const blocked = minsLeft<=60;
+
+    const toggleSeat=(s:string)=>{
+        if(taken.has(s)) return;
+        setSeats(curr=>{
+            const has = curr.includes(s);
+            let next = has ? curr.filter(x=>x!==s) : [...curr, s];
+            if(next.length>qty) next = next.slice(0, qty);
+            return next;
+        });
+    };
+
     const submit = async ()=>{
+        if (isLoading) return;
+        if (!token) { router.push('/auth?mode=login'); return; }
         if (!canSubmit) return;
-        const payload = {
-            product_id: detail.id,
-            qty,
-            seats,
-            passenger_name: `${passenger.first_name} ${passenger.last_name}`.trim(),
-            passenger_doc_type: passenger.doc_type,
-            passenger_national_id: passenger.doc_type==='tc' ? passenger.national_id : null,
-            passenger_passport_no: passenger.doc_type==='passport' ? passenger.passport_no : null,
-            passenger_nationality: passenger.doc_type==='passport' ? passenger.nationality : 'TR',
-            passenger_email: passenger.email || null,
-            passenger_phone: passenger.phone || null,
-            card_holder: `${passenger.first_name} ${passenger.last_name}`.trim(),
-            card_number: payment.card_number,
-            card_exp: payment.card_exp,
-            card_cvv: payment.card_cvv,
-        };
-        await onPurchase(payload);
+        if (blocked) { alert('Kalkışa 1 saatten az kaldı. Satış kapalı.'); return; }
+
+        setSubmitting(true);
+        try{
+            const payload = {
+                product_id: detail.id,
+                qty,
+                seats,
+                passenger_name: `${passenger.first_name} ${passenger.last_name}`.trim(),
+                passenger_doc_type: passenger.doc_type,
+                passenger_national_id: passenger.doc_type==='tc' ? passenger.national_id : null,
+                passenger_passport_no: passenger.doc_type==='passport' ? passenger.passport_no : null,
+                passenger_nationality: passenger.doc_type==='passport' ? passenger.nationality : 'TR',
+                passenger_email: passenger.email || null,
+                passenger_phone: passenger.phone || null,
+                card_holder: payment.card_holder,
+                card_number: payment.card_number,
+                card_exp: payment.card_exp,
+                card_cvv: payment.card_cvv,
+            };
+            const { data } = await axios.post<PurchaseResp>('/orders', payload);
+            if (data?.status) onPurchased(data?.pnr || '');
+            else alert(data?.message || 'Satın alma başarısız');
+        } catch(e:any){
+            const m = e?.response?.data?.message
+                || (e?.response?.data?.errors && Object.values(e.response.data.errors).flat().join('\n'))
+                || 'Satın alma hatası';
+            alert(m);
+        } finally { setSubmitting(false); }
     };
 
     const currency = useMemo(()=> new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY'}),[]);
@@ -342,6 +324,11 @@ function PurchaseModal({
                 <div className="p-4 grid lg:grid-cols-[1.2fr_1fr] gap-4">
                     {/* Sol: Koltuk seçimi */}
                     <div className="space-y-4">
+                        {blocked && (
+                            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                                Kalkışa 1 saatten az kaldı. Satış kapalı.
+                            </div>
+                        )}
                         <section className="rounded-xl border p-3">
                             <div className="flex items-center justify-between mb-2">
                                 <h3 className="font-semibold">Koltuk Seçimi</h3>
@@ -353,15 +340,7 @@ function PurchaseModal({
                                     </select>
                                 </div>
                             </div>
-                            <SeatMap rows={rows} layout={layout} taken={taken} selected={seats} onToggle={(s)=>{
-                                if(taken.has(s)) return;
-                                setSeats(curr=>{
-                                    const has = curr.includes(s);
-                                    let next = has ? curr.filter(x=>x!==s) : [...curr, s];
-                                    if(next.length>qty) next = next.slice(0, qty);
-                                    return next;
-                                });
-                            }}/>
+                            <SeatMap rows={rows} layout={layout} taken={taken} selected={seats} onToggle={toggleSeat}/>
                             <div className="mt-3 text-sm text-indigo-900/70">Seçilen: {seats.length ? seats.join(', ') : '—'}</div>
                         </section>
 
@@ -415,7 +394,7 @@ function PurchaseModal({
 
                         <section className="rounded-xl border p-3">
                             <h3 className="font-semibold mb-2">Ödeme Bilgileri</h3>
-                            <Input label="Kart Üzerindeki İsim" value={`${passenger.first_name} ${passenger.last_name}`.trim()} onChange={()=>{}} />
+                            <Input label="Kart Üzerindeki İsim" value={payment.card_holder} onChange={v=>setPayment(s=>({...s, card_holder:v}))}/>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                                 <Input label="Kart Num." value={payment.card_number} onChange={v=>setPayment(s=>({...s, card_number:v}))} placeholder="**** **** **** ****"/>
                                 <Input label="SKT (AA/YY)" value={payment.card_exp} onChange={v=>setPayment(s=>({...s, card_exp:v}))} placeholder="MM/YY"/>
@@ -429,17 +408,17 @@ function PurchaseModal({
                                 <div className="text-indigo-900/60">Sefer</div><div>{detail.trip ?? '-'}</div>
                                 <div className="text-indigo-900/60">Güzergâh</div><div>{detail.terminal_from} → {detail.terminal_to}</div>
                                 <div className="text-indigo-900/60">Kalkış</div><div>{fmtTR(detail.departure_time)}</div>
-                                <div className="text-indigo-900/60">Adet</div><div>{seats.length || 0}</div>
+                                <div className="text-indigo-900/60">Adet</div><div>{qty}</div>
                                 <div className="text-indigo-900/60">Koltuk</div><div>{seats.length ? seats.join(', ') : '—'}</div>
-                                <div className="text-indigo-900/60">Tutar</div>
-                                <div className="font-semibold">{currency.format(Number(detail.cost||0)*seats.length)}</div>
+                                <div className="text-indigo-900/60">Tutar</div><div className="font-semibold">
+                                {currency.format(Number(detail.cost||0)*seats.length)}
+                            </div>
                             </div>
                             <div className="mt-3 flex items-center justify-end gap-2">
                                 <button className="px-4 py-2 rounded-xl border" onClick={onClose}>Vazgeç</button>
                                 <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white disabled:opacity-50"
-                                        disabled={!canSubmit || submitting}
-                                        onClick={submit}>
-                                    {submitting? 'Gönderiliyor…' : 'Satın Al'}
+                                        disabled={!canSubmit || submitting || blocked} onClick={submit}>
+                                    {submitting? 'Gönderiliyor…' : (blocked? 'Satış Kapalı':'Satın Al')}
                                 </button>
                             </div>
                         </section>
