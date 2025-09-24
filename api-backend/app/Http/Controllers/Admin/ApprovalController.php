@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\RoleRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class ApprovalController extends Controller
 {
@@ -46,20 +47,28 @@ class ApprovalController extends Controller
     public function reject(Request $r, User $user)
     {
         abort_unless($user->role === 'personnel', 404);
+        if ($user->role_status !== 'pending') {
+            return response()->json(['status'=>false,'message'=>'Sadece bekleyen başvurular reddedilebilir'], 422);
+        }
 
-        $user->update(['role_status' => 'rejected']);
+        DB::transaction(function() use ($r, $user) {
+            // İsteğe göre: kayıt tutmak istemiyorsan direkt sil
+            RoleRequest::where('user_id', $user->id)
+                ->where('type', 'personnel_request')
+                ->delete();
 
-        RoleRequest::where('user_id', $user->id)
-            ->where('type', 'personnel_request')
-            ->where('status', 'pending')
-            ->latest()
-            ->first()?->update([
-                'status'      => 'rejected',
-                'reviewed_by' => $r->user()->id,
-                'reviewed_at' => now(),
-                'note'        => $r->input('note'),
-            ]);
+            // SoftDeletes varsa e-posta kilidi kalkması için forceDelete
+            $usesSoftDeletes = in_array(
+                'Illuminate\\Database\\Eloquent\\SoftDeletes',
+                class_uses_recursive(User::class)
+            );
 
-        return response()->json(['status' => true, 'message' => 'Rejected']);
-    }
-}
+            if ($usesSoftDeletes) {
+                $user->forceDelete();   // hard delete
+            } else {
+                $user->delete();        // normal delete
+            }
+        });
+
+        return response()->json(['status' => true, 'message' => 'Başvuru reddedildi ve kullanıcı silindi']);
+    }}

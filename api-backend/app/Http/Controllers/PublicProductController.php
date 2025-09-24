@@ -50,42 +50,69 @@ class PublicProductController extends Controller
         $rows   = $product->seat_rows ?? 12;
         $route  = $this->j2a($product->route ?? []);
 
-        $taken = [];
+        // Satın alınmış koltuklar
+        $purchased = [];
         try {
-            if (Schema::hasTable('order_items') && Schema::hasColumn('order_items','seats')) {
-                $raw = DB::table('order_items')
+            if (\Illuminate\Support\Facades\Schema::hasTable('order_items') &&
+                \Illuminate\Support\Facades\Schema::hasColumn('order_items','seats')) {
+                $raw = \Illuminate\Support\Facades\DB::table('order_items')
                     ->where('product_id', $product->id)
                     ->pluck('seats')->all();
-                $taken = collect($raw)->flatMap(fn($v)=> $this->j2a($v))
-                    ->filter(fn($s)=> is_string($s) && $s!=='')->unique()->values()->all();
-            } elseif (Schema::hasTable('orders') && Schema::hasColumn('orders','seats')) {
-                $raw = DB::table('orders')
+                $purchased = collect($raw)
+                    ->flatMap(fn($v) => $this->j2a($v))
+                    ->filter(fn($s) => is_string($s) && $s !== '')
+                    ->values()->all();
+            } elseif (\Illuminate\Support\Facades\Schema::hasTable('orders') &&
+                \Illuminate\Support\Facades\Schema::hasColumn('orders','seats')) {
+                $raw = \Illuminate\Support\Facades\DB::table('orders')
                     ->where('product_id', $product->id)
                     ->pluck('seats')->all();
-                $taken = collect($raw)->flatMap(fn($v)=> $this->j2a($v))
-                    ->filter(fn($s)=> is_string($s) && $s!=='')->unique()->values()->all();
+                $purchased = collect($raw)
+                    ->flatMap(fn($v) => $this->j2a($v))
+                    ->filter(fn($s) => is_string($s) && $s !== '')
+                    ->values()->all();
             }
         } catch (\Throwable $e) {
-            $taken = [];
+            $purchased = [];
         }
 
+        // Aktif hold'lar
+        $holds = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('seat_holds')) {
+                $holds = \Illuminate\Support\Facades\DB::table('seat_holds')
+                    ->where('product_id', $product->id)
+                    ->where('expires_at', '>', now())
+                    ->pluck('seat')->all();
+            }
+        } catch (\Throwable $e) {
+            $holds = [];
+        }
+
+        // Birleştirilmiş dolu koltuk listesi
+        $taken = array_values(
+            collect($purchased)->merge($holds)
+                ->filter(fn($s) => is_string($s) && $s !== '')
+                ->unique()->all()
+        );
+
         return response()->json([
-            'id'                 => $product->id,
-            'trip'               => $product->trip,
-            'company_name'       => $product->company_name,
-            'terminal_from'      => $product->terminal_from,
-            'terminal_to'        => $product->terminal_to,
-            'departure_time'     => $product->departure_time,
-            'cost'               => $product->cost,
-            'duration'           => $product->duration,
-            'bus_type'           => $product->bus_type,
-            'note'               => $product->note,
-            'route'              => $route,
-            'important_notes'    => $product->important_notes,
-            'cancellation_policy'=> $product->cancellation_policy,
-            'seat_map'           => ['layout'=>$layout, 'rows'=>$rows],
-            'taken_seats'        => $taken,
-            'is_active'          => (bool)$product->is_active,
+            'id'                  => $product->id,
+            'trip'                => $product->trip,
+            'company_name'        => $product->company_name,
+            'terminal_from'       => $product->terminal_from,
+            'terminal_to'         => $product->terminal_to,
+            'departure_time'      => $product->departure_time,
+            'cost'                => $product->cost,
+            'duration'            => $product->duration,
+            'bus_type'            => $product->bus_type,
+            'note'                => $product->note,
+            'route'               => $route,
+            'important_notes'     => $product->important_notes,
+            'cancellation_policy' => $product->cancellation_policy,
+            'seat_map'            => ['layout' => $layout, 'rows' => $rows],
+            'taken_seats'         => $taken,
+            'is_active'           => (bool) $product->is_active,
         ]);
     }
 }

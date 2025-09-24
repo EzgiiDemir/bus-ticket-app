@@ -5,30 +5,31 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ef1886e3-1d19-471a-a296-452f827323e0" name="Changes" comment="last update">
+      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/SeatHoldController.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/app/Models/SeatHold.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/database/migrations/2025_09_24_083033_create_seat_holds_table.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/admin/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/ApprovalController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/ApprovalController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/PeopleController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/PeopleController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/TripController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/TripController.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/OrderController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/OrderController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Middleware/AdminOnly.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Middleware/AdminOnly.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Middleware/PersonnelActive.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Middleware/PersonnelActive.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/context/AppProvider.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/context/AppProvider.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/auth/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/auth/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/account/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/account/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/approvals/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/approvals/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/ProductController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/ProductController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/PublicProductController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/PublicProductController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/routes/api.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/routes/api.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/routes/console.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/routes/console.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/customers/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/layout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/layout.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/trips/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/orders/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/orders/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/profile/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/profile/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/trips/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/account/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/account/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/company/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/company/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/customers/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/history/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/history/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/orders/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/orders/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/trips/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/lib/export.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/lib/export.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/lib/datetime.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/lib/datetime.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/PurchaseModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/PurchaseModal.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/TripFilters.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/TripFilters.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/TripList.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/TripList.tsx" afterDir="false" />
     </list>
@@ -244,7 +245,7 @@
       <workItem from="1758487262479" duration="312000" />
       <workItem from="1758487902733" duration="1120000" />
       <workItem from="1758550985123" duration="12181000" />
-      <workItem from="1758605332699" duration="17631000" />
+      <workItem from="1758605332699" duration="34318000" />
     </task>
     <task id="LOCAL-00001" summary="fronted update">
       <option name="closed" value="true" />

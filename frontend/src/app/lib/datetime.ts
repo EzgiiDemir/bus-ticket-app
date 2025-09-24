@@ -1,4 +1,4 @@
-export const fmtTR = (iso?: string) =>
+export const fmtTR = (iso?: string | null | undefined) =>
     iso
         ? new Date(iso).toLocaleString('tr-TR', {
             year: 'numeric',

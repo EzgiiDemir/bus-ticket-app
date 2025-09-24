@@ -230,7 +230,7 @@ export default function AdminOverviewPage() {
                                     "gelir_son30gun",
                                     series,
                                     [
-                                        { key: "d", title: "Tarih" },
+                                        { key: "name", title: "Şirket" },
                                         { key: "revenue", title: "Gelir" },
                                     ]
                                 );
@@ -244,15 +244,15 @@ export default function AdminOverviewPage() {
                     </div>
                 </div>
                 <div className="h-72 mt-2">
-                    {series.length ? (
+                    {breakdown.length ? (
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={series}>
+                            <LineChart data={breakdown}>
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="d" />
+                                <XAxis dataKey="name" />
                                 <YAxis />
                                 <Tooltip />
                                 <Legend />
-                                <Line type="monotone" dataKey="revenue" />
+                                <Bar dataKey="revenue" />
                             </LineChart>
                         </ResponsiveContainer>
                     ) : (

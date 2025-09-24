@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
@@ -41,17 +42,64 @@ class PeopleController extends Controller
         return response()->json(['personnel'=>$rows]);
     }
 
+    /**
+     * Return aggregated customers list.
+     * Each row includes `customer_id` (MD5 of email or name) to use as stable identifier on frontend.
+     */
     public function customers(Request $r)
     {
         $q = $r->query('q');
-        $rows = Order::selectRaw('passenger_name, passenger_email, COUNT(*) as orders, SUM(total) as revenue, MAX(created_at) as last_order_at')
+
+        $rows = Order::selectRaw(
+            'MD5(COALESCE(passenger_email, passenger_name)) as customer_id,
+                 COALESCE(passenger_name, "") as passenger_name,
+                 COALESCE(passenger_email, "") as passenger_email,
+                 COUNT(*) as orders,
+                 COALESCE(SUM(total),0) as revenue,
+                 MAX(created_at) as last_order_at'
+        )
             ->where('status','paid')
-            ->when($q, fn($qq)=>$qq->where(function($w) use($q){
-                $w->where('passenger_name','like',"%$q%")->orWhere('passenger_email','like',"%$q%");
+            ->when($q, fn($qq)=> $qq->where(function($w) use ($q){
+                $term = "%$q%";
+                $w->where('passenger_name','like',$term)
+                    ->orWhere('passenger_email','like',$term);
             }))
-            ->groupBy('passenger_name','passenger_email')
-            ->orderByDesc('last_order_at')->get();
+            ->groupBy(DB::raw('COALESCE(passenger_email, passenger_name)'), 'passenger_name', 'passenger_email')
+            ->orderByDesc('last_order_at')
+            ->get();
 
         return response()->json(['customers'=>$rows]);
+    }
+
+    /**
+     * Return paginated orders for a specific customer.
+     * $identifier can be:
+     *  - MD5(...) previously returned as customer_id
+     *  - raw email
+     *  - raw passenger_name
+     */
+    public function customerOrders(Request $r, $identifier)
+    {
+        $decoded = urldecode($identifier);
+        $per = max(1, min(200, (int)$r->query('per_page', 10)));
+        $page = max(1, (int)$r->query('page', 1));
+
+        $q = Order::with(['product:id,trip,terminal_from,terminal_to,departure_time,cost'])
+            ->where('status','paid');
+
+        if (preg_match('/^[a-f0-9]{32}$/i', $decoded)) {
+            // MD5 identifier
+            $q->whereRaw('MD5(COALESCE(passenger_email, passenger_name)) = ?', [$decoded]);
+        } else {
+            // Raw email or name
+            $q->where(function($w) use ($decoded){
+                $w->where('passenger_email', $decoded)
+                    ->orWhere('passenger_name', $decoded);
+            });
+        }
+
+        $result = $q->orderByDesc('created_at')->paginate($per, ['*'], 'page', $page);
+
+        return response()->json($result);
     }
 }

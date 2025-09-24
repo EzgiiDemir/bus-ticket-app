@@ -7,6 +7,7 @@ import { api } from '@/app/lib/api';
 import { myAppHook } from '../../../../../context/AppProvider';
 import { fmtTR } from '@/app/lib/datetime';
 import { exportCSV, exportJSON } from '@/app/lib/export';
+import { useRouter } from 'next/navigation';
 
 type Trip = {
     id: number;
@@ -96,7 +97,7 @@ export default function PassengerTrips() {
         { key: 'trip', title: 'Sefer' },
         { key: 'company_name', title: 'Firma' },
         { key: 'route', title: 'Güzergâh', map: (r: Trip) => `${r.terminal_from} → ${r.terminal_to}` },
-        { key: 'departure_time', title: 'Kalkış', map: (r: Trip) => fmtTR(r.departure_time) },
+        { key: 'departure_time', title: 'Kalkış', map: (r: Trip) => fmtTR(r.departure_time)},
         { key: 'cost', title: 'Ücret', map: (r: Trip) => currency.format(Number(r.cost || 0)) },
         { key: 'duration', title: 'Süre' },
         { key: 'bus_type', title: 'Otobüs Tipi' },
@@ -128,6 +129,7 @@ export default function PassengerTrips() {
     };
 
     const isInactive = (r: Trip) => r.is_active === 0 || r.is_active === false;
+    const router = useRouter();
 
     return (
         <div className="space-y-4 text-indigo-900">
@@ -272,10 +274,10 @@ export default function PassengerTrips() {
                     onPurchased={(pnr) => {
                         setOpen(false); setDetail(null);
                         alert(`PNR: ${pnr}`);
-                        // yönlendir
-                        window.location.href = '/dashboard/passenger';
+                        router.push('/dashboard/passenger/orders');
                     }}
                 />
+
             )}
 
             {loading && <div className="fixed inset-0 bg-black/20 grid place-items-center text-white">Yükleniyor…</div>}
@@ -288,9 +290,7 @@ export default function PassengerTrips() {
 function PurchaseModal({
                            detail, onClose, onPurchased
                        }: { detail: TripDetail; onClose: () => void; onPurchased: (pnr: string) => void }) {
-
     const { token, isLoading } = (myAppHook() as any) || {};
-
     const layout = (detail.seat_map?.layout || detail.bus_type || '2+1') as '2+1' | '2+2';
     const rows = detail.seat_map?.rows ?? 12;
 
@@ -304,6 +304,12 @@ function PurchaseModal({
     const [submitting, setSubmitting] = useState(false);
     const [err, setErr] = useState<string>('');
     const [banner, setBanner] = useState<string>('');
+
+    // ---- HOLD: reservation id
+    const [reservationId] = useState<string>(() => {
+        const rnd = (globalThis.crypto as any)?.randomUUID?.() ?? `res_${Math.random().toString(36).slice(2)}`;
+        return rnd;
+    });
 
     const taken = useMemo(() => new Set(detail.taken_seats || []), [detail.taken_seats]);
     const price = useMemo(() => Number(detail.cost || 0) * seats.length, [detail.cost, seats.length]);
@@ -333,22 +339,79 @@ function PurchaseModal({
             return next;
         });
     };
+
+    // ---- HOLD API helpers
+    const apiOpts = token ? { token } : undefined;
+    const holdSeats = async (list: string[]) => {
+        if (!list.length) return;
+        try {
+            await api.post('/seat-holds/hold', {
+                reservation_id: reservationId,
+                product_id: detail.id,
+                seats: list
+            }, apiOpts);
+            setBanner('Koltuklar 5 dk rezerve edildi. İşlemi tamamlayın veya seçim değiştiğinde otomatik güncellenir.');
+            setErr('');
+        } catch (e: any) {
+            const p = e?.response?.data ?? e;
+            const conflicts: string[] =
+                p?.conflicts ?? (p?.message?.includes('Koltuk') ? [] : []);
+            setErr(p?.message || 'Koltuk rezerve edilemedi.');
+            // Çakışan koltukları çıkar
+            if (Array.isArray(conflicts) && conflicts.length) {
+                setSeats(s => s.filter(x => !conflicts.includes(x)));
+            }
+        }
+    };
+    const extendHold = async () => {
+        try {
+            await api.post('/seat-holds/extend', { reservation_id: reservationId }, apiOpts);
+        } catch { /* sessiz */ }
+    };
+    const releaseHold = async () => {
+        try {
+            await api.post('/seat-holds/release', { reservation_id: reservationId }, apiOpts);
+        } catch { /* sessiz */ }
+    };
+
+    // Seçim değişince HOLD al (debounce)
+    useEffect(() => {
+        if (blocked) return;
+        const t = setTimeout(() => {
+            if (seats.length === qty && seats.length > 0) {
+                void holdSeats(seats);
+            } else if (seats.length === 0) {
+                void releaseHold();
+            }
+        }, 350);
+        return () => clearTimeout(t);
+    }, [seats, qty, blocked]);
+
+    // Her 2 dakikada bir hold uzat
+    useEffect(() => {
+        if (blocked || seats.length === 0) return;
+        const iv = setInterval(() => { void extendHold(); }, 120_000);
+        return () => clearInterval(iv);
+    }, [seats.length, blocked]);
+
+    // Modal kapanınca hold serbest bırak
+    useEffect(() => {
+        return () => { void releaseHold(); };
+    }, []);
+
     const unit_price = Number(detail.cost || 0);
     const total = unit_price * Number(qty || 1);
+
     const submit = async () => {
         if (isLoading) return;
-        if (!token) {
-            // If not token, ensure Sanctum CSRF cookie is set (session-auth)
-            try {
-                await api.csrf();
-            } catch { /* ignore */ }
-        }
+        if (!token) { try { await api.csrf(); } catch {} }
         if (!canSubmit) { setErr('Zorunlu alanları ve kart bilgilerini doğrulayın.'); return; }
         if (blocked) { setErr('Kalkışa 1 saatten az kaldı. Satış kapalı.'); return; }
 
         setSubmitting(true); setErr(''); setBanner('');
         try {
             const payload = {
+                reservation_id: reservationId,      // <— ÖNEMLİ
                 product_id: detail.id,
                 qty,
                 seats,
@@ -359,20 +422,15 @@ function PurchaseModal({
                 passenger_nationality: passenger.doc_type === 'passport' ? passenger.nationality : 'TR',
                 passenger_email: passenger.email || null,
                 passenger_phone: passenger.phone || null,
-
                 card_holder: payment.card_holder,
                 card_number: payment.card_number,
                 card_exp: payment.card_exp,
                 card_cvv: payment.card_cvv,
-
                 unit_price,
                 total,
             };
-            // Use api helper: if token provided -> include token; otherwise rely on cookie (api.request sets credentials include)
-            const opt = token ? { token } : undefined;
-            const res = await api.post('/orders', payload, opt);
+            const res = await api.post('/orders', payload, apiOpts);
             const data = await api.json<PurchaseResp>(res);
-
             if (data?.status) {
                 setBanner('Satın alma başarılı.');
                 onPurchased(data?.pnr || '');
@@ -380,9 +438,8 @@ function PurchaseModal({
             }
             setErr(data?.message || 'Satın alma başarısız.');
         } catch (e: any) {
-            const p: ApiErr | undefined = e?.response?.data ?? (e as any);
-            const msg = p?.message || (p?.errors && Object.values(p.errors).flat().join('\n')) || 'Satın alma hatası.';
-            setErr(msg);
+            const p = e?.response?.data ?? e;
+            setErr(p?.message || 'Satın alma hatası.');
         } finally {
             setSubmitting(false);
         }
@@ -424,7 +481,7 @@ function PurchaseModal({
                                         onChange={e => { const n = Number(e.target.value); setQty(n); setSeats(s => s.slice(0, n)); }}
                                         aria-label="Bilet adedi"
                                     >
-                                        {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+                                        {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
                                     </select>
                                 </div>
                             </div>
@@ -466,9 +523,7 @@ function PurchaseModal({
                                     <select
                                         className="w-full rounded-lg border px-3 py-2"
                                         value={passenger.doc_type}
-                                        onChange={e => setPassenger(s => ({ ...s, doc_type: e.target.value as any }))}
-                                        aria-label="Belge türü"
-                                    >
+                                        onChange={e => setPassenger(s => ({ ...s, doc_type: e.target.value as any }))}>
                                         <option value="tc">TC Kimlik</option>
                                         <option value="passport">Pasaport</option>
                                     </select>
@@ -486,7 +541,7 @@ function PurchaseModal({
                             <h3 className="font-semibold mb-2">Ödeme Bilgileri</h3>
                             <Input label="Kart Üzerindeki İsim" required value={payment.card_holder} onChange={v => setPayment(s => ({ ...s, card_holder: v }))} />
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
-                                <Input label="Kart Num." required inputMode="numeric" pattern="^[0-9\s]{12,19}$" value={payment.card_number} onChange={v => setPayment(s => ({ ...s, card_number: v }))} placeholder="**** **** **** ****" />
+                                <Input label="Kart Num." required inputMode="numeric" pattern="^[0-9\\s]{12,19}$" value={payment.card_number} onChange={v => setPayment(s => ({ ...s, card_number: v }))} placeholder="**** **** **** ****" />
                                 <Input label="SKT (AA/YY)" required pattern="^\\d{2}\\/\\d{2}$" value={payment.card_exp} onChange={v => setPayment(s => ({ ...s, card_exp: v }))} placeholder="MM/YY" />
                                 <Input label="CVV" required inputMode="numeric" pattern="^\\d{3,4}$" value={payment.card_cvv} onChange={v => setPayment(s => ({ ...s, card_cvv: v }))} />
                             </div>
@@ -503,13 +558,12 @@ function PurchaseModal({
                                 <div className="text-indigo-900/60">Tutar</div><div className="font-semibold">{currency.format(price)}</div>
                             </div>
                             <div className="mt-3 flex items-center justify-end gap-2">
-                                <button className="px-4 py-2 rounded-xl border" onClick={onClose}>Vazgeç</button>
+                                <button className="px-4 py-2 rounded-xl border" onClick={async()=>{ await releaseHold(); onClose(); }}>Vazgeç</button>
                                 <button
                                     className="px-4 py-2 rounded-xl bg-indigo-600 text-white disabled:opacity-50"
                                     disabled={!canSubmit || submitting || blocked}
                                     onClick={submit}
-                                    aria-label="Satın al"
-                                >
+                                    aria-label="Satın al">
                                     {submitting ? 'Gönderiliyor…' : (blocked ? 'Satış Kapalı' : 'Satın Al')}
                                 </button>
                             </div>
@@ -520,6 +574,7 @@ function PurchaseModal({
         </div>
     );
 }
+
 
 /* ---------- Girdiler ve Koltuk Haritası ---------- */
 

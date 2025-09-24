@@ -307,7 +307,8 @@ export default function Trips(){
                 )}
             </div>
 
-            {/* Pagination */}
+            {/* Pagination */
+            }
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-indigo-900/60">
                     Toplam <b>{total}</b> kayıt • Sayfa {page}/{totalPages}
@@ -421,12 +422,39 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         return { ok: errors.length===0, msg: errors.join('\n') };
     };
 
+    // ---- EKLENDİ: zaman ve rota normalizasyonu
+    const normalizeStopTime = (raw: string) => {
+        const t = String(raw || "").trim().toLowerCase();
+        if (!t) return "";
+        const hm = t.match(/^(\d{1,2}):(\d{2})$/);
+        if (hm) return `${hm[1].padStart(2,"0")}:${hm[2]}`;
+        let mins = 0;
+        const h = t.match(/(\d+)\s*(s|sa|saat)/);
+        if (h) mins += parseInt(h[1], 10) * 60;
+        const m = t.match(/(\d+)\s*(dk|dak|dakika)?/);
+        if (m) mins += parseInt(m[1], 10);
+        if (mins > 0) return `${mins}dk`;
+        const n = parseInt(t, 10);
+        return Number.isFinite(n) && n > 0 ? `${n}dk` : t;
+    };
+
+    const buildRoutePayload = (route?: { name?: string; time?: string }[]) => {
+        const r = (route || [])
+            .map(s => ({
+                stop: String(s?.name || "").trim(),
+                time: normalizeStopTime(String(s?.time || "")),
+            }))
+            .filter(s => s.stop.length > 0);
+        return r.length ? r : undefined;
+    };
+    // ---- EKLENDİ SON
+
     const save=async()=>{
         if (isLoading || !token) { alert('Önce giriş yapın'); return; }
         const v = validate();
         if(!v.ok){ alert(v.msg); return; }
 
-        const payload = {
+        const base:any = {
             trip: (form.trip || `${form.terminal_from} - ${form.terminal_to}`),
             company_name: form.company_name || undefined,
             terminal_from: form.terminal_from,
@@ -438,15 +466,17 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
             note: form.note || null,
             duration: form.duration || null,
             bus_type: form.bus_type || null,
-            route: (form.route||[]).filter(s=>String(s.name||'').trim()),
             cancellation_policy: form.cancellation_policy || null,
             important_notes: form.important_notes || null,
         };
 
+        const routePayload = buildRoutePayload(form.route);
+        if (routePayload) base.route = routePayload; // boşsa hiç ekleme
+
         try{
             setErr('');
-            if(initial) await axios.put(`/products/${initial.id}`, payload, { headers:{ Accept:'application/json' } });
-            else        await axios.post('/products', payload, { headers:{ Accept:'application/json' } });
+            if(initial) await axios.put(`/products/${initial.id}`, base, { headers:{ Accept:'application/json' } });
+            else        await axios.post('/products', base, { headers:{ Accept:'application/json' } });
             onSaved();
         }catch(e:any){
             const p:ApiErr|undefined = e?.response?.data;
@@ -561,8 +591,7 @@ function TerminalSelect({terminals, value, onChange}:{terminals:Terminal[]; valu
 
 function RouteStops({
                         form,setStop,addStop,delStop,terminals
-                    }:{
-    form:Partial<Trip>;
+                    }:{ form:Partial<Trip>;
     setStop:(i:number,k:'name'|'time',v:string)=>void;
     addStop:()=>void;
     delStop:(i:number)=>void;
@@ -583,7 +612,8 @@ function RouteStops({
                             <option value="">Durak seçin</option>
                             {terminals.map(t=> <option key={t.id} value={t.name}>{t.city} — {t.name}</option>)}
                         </select>
-                        <input className="rounded-xl border px-3 py-2" placeholder="Saat (örn 19:45)"
+                        <input className="rounded-xl border px-3 py-2"
+                               placeholder="Süre/varış (örn 50dk veya 19:45)"
                                value={s.time||''}
                                onChange={e=>setStop(i,'time',e.target.value)} />
                         <button type="button" className="px-2 py-2 rounded-lg border" onClick={()=>delStop(i)}>Sil</button>

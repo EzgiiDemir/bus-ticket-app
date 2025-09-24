@@ -12,6 +12,8 @@ import TripList from "@/components/TripList";
 import Footer from "@/components/Footer";
 import PurchaseModal from "@/components/PurchaseModal";
 import { api } from "./lib/api";
+import { useRouter } from "next/navigation";
+import { myAppHook } from "../../context/AppProvider";
 
 /* ---------------- Types ---------------- */
 type Trip = {
@@ -53,6 +55,19 @@ function hasDataArr(x: any): x is ApiListData {
 
 /* ---------------- Component ---------------- */
 export default function HomePage() {
+
+    const router = useRouter();
+    const { token } = myAppHook() as any;
+
+    const handleBuy = (id: number) => {
+        if (!token) {
+            const next = encodeURIComponent(`/?buy=${id}`);
+            router.push(`/auth?mode=login`);
+            return;
+        }
+        setBuyId(id);
+    };
+
     // Filters
     const [core, setCore] = useState<CoreFilters>({
         tripType: "oneway",
@@ -349,12 +364,13 @@ export default function HomePage() {
                     lastPage={lastPage}
                     onPrev={handlePrev}
                     onNext={handleNext}
-                    onBuy={(id) => setBuyId(id)}
+                    onBuy={handleBuy}
                 />
+
             </section>
 
             {/* Purchase */}
-            {buyId !== null && (
+            {buyId !== null && token && (
                 <PurchaseModal id={buyId} onClose={() => setBuyId(null)} onPurchased={() => setBuyId(null)} />
             )}
 

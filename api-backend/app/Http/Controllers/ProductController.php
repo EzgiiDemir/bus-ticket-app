@@ -101,7 +101,7 @@ class ProductController extends Controller
             'note'                 => 'nullable|string|max:500',
             'duration'             => 'nullable|string|max:64',
             'route'                => 'nullable|array',
-            'route.*.stop'         => 'required_with:route|string|max:255',
+            'route.*.stop'         => 'nullable|string|max:255',
             'route.*.time'         => 'nullable|string|max:16',
             'bus_type'             => 'nullable|string|max:32',
             'important_notes'      => 'nullable|string',

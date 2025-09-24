@@ -84,11 +84,11 @@ export default function Page(){
         { key:'pnr',        title:'PNR' },
         { key:'trip',       title:'Sefer',         map:(o:Order)=>o.product?.trip ?? '' },
         { key:'route',      title:'Güzergah',      map:(o:Order)=>`${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}` },
-        { key:'departure',  title:'Kalkış',        map:(o:Order)=>fmtTR(o.product?.departure_time) },
+        { key:'departure',  title:'Kalkış',        map:(o:Order)=>fmtTR(o.product?.departure_time)},
         { key:'qty',        title:'Adet' },
         { key:'unit_price', title:'Birim' },
         { key:'total',      title:'Toplam' },
-        { key:'created_at', title:'Sipariş Tarihi',map:(o:Order)=>fmtTR(o.created_at) },
+        { key:'created_at', title:'Sipariş Tarihi',map:(o:Order)=>fmtTR(o.created_at)},
     ] as const;
 
     const exportAll = async () => {

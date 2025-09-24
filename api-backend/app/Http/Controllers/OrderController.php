@@ -26,41 +26,36 @@ class OrderController extends Controller
     }
     public function store(Request $request)
     {
-        // validation: daha esnek kurallar (unit_price artık nullable)
         $data = $request->validate([
             'product_id'            => ['required','exists:products,id'],
             'qty'                   => ['required','integer','min:1','max:10'],
             'seats'                 => ['required','array','min:1','max:10'],
             'seats.*'               => ['string'],
+            'reservation_id'        => ['nullable','uuid'],
 
-            // istemci unit_price gönderebilir ama zorunlu değil
             'unit_price'            => ['nullable','numeric'],
 
-            // yolcu
             'passenger_name'        => ['required','string','max:255'],
             'passenger_doc_type'    => ['nullable','in:tc,passport'],
             'passenger_national_id' => ['nullable','string','max:32'],
             'passenger_passport_no' => ['nullable','string','max:64'],
             'passenger_nationality' => ['nullable','string','max:5'],
 
-            // iletişim
             'passenger_email'       => ['nullable','email'],
             'passenger_phone'       => ['nullable','string','max:32'],
 
-            // ödeme (demo; prod’da tokenize edin)
             'card_holder'           => ['required','string','max:150'],
             'card_number'           => ['required','string','min:10','max:25'],
             'card_exp'              => ['required','string'],
             'card_cvv'              => ['required','string','min:3','max:4'],
         ]);
 
-        // Güvenlik: product ve sunucu tarafı fiyatı kullan
         $product = Product::findOrFail($data['product_id']);
         if (!$product->is_active) {
             return response()->json(['status'=>false,'message'=>'Trip not available'], 422);
         }
 
-        // temizle & normalize seats
+        // Koltukları normalize et
         $seats = collect($data['seats'] ?? [])->filter()->unique()->values()->all();
         if (count($seats) < 1) {
             return response()->json(['status'=>false,'message'=>'En az 1 koltuk seçiniz.'], 422);
@@ -68,60 +63,61 @@ class OrderController extends Controller
         if (count($seats) > 10) {
             return response()->json(['status'=>false,'message'=>'Maksimum 10 koltuk seçilebilir.'], 422);
         }
+        if ((int)$data['qty'] !== count($seats)) {
+            return response()->json(['status'=>false,'message'=>'Adet ile koltuk sayısı eşleşmiyor.'], 422);
+        }
 
-        // transaction ile koltuk çakışma kontrolü ve sipariş oluşturma
         $order = DB::transaction(function () use ($request, $product, $data, $seats) {
-            // Mevcut dolu koltukları al (order_items veya orders tablosuna göre)
-            $taken = [];
+            // 1) Aktif hold çatışması
+            $conflictHolds = DB::table('seat_holds')
+                ->where('product_id', $product->id)
+                ->whereIn('seat', $seats)
+                ->where('expires_at', '>', now())
+                ->when($data['reservation_id'] ?? null, function ($q) use ($data) {
+                    $q->where('reservation_id', '<>', $data['reservation_id']);
+                })
+                ->lockForUpdate()
+                ->pluck('seat')->all();
 
-            if (Schema::hasTable('order_items') && Schema::hasColumn('order_items','seats')) {
-                $raw = DB::table('order_items')
-                    ->where('product_id', $product->id)
-                    ->lockForUpdate()
-                    ->pluck('seats')->all();
-                $taken = collect($raw)
-                    ->flatMap(function ($v) {
-                        if (is_array($v)) return $v;
-                        if (is_string($v) && $v !== '') {
-                            $j = json_decode($v, true);
-                            return is_array($j) ? $j : [];
-                        }
-                        return [];
-                    })
-                    ->filter(fn($s)=> is_string($s) && $s!=='')
-                    ->unique()->values()->all();
-            } elseif (Schema::hasTable('orders') && Schema::hasColumn('orders','seats')) {
+            if (!empty($conflictHolds)) {
+                abort(response()->json([
+                    'status'    => false,
+                    'message'   => 'Koltuk(lar) şu an başka müşteride: '.implode(', ', $conflictHolds),
+                    'conflicts' => array_values($conflictHolds),
+                ], 422));
+            }
+
+            // 2) Satın alınmış koltuklarla çakışma
+            $taken = [];
+            if (Schema::hasTable('orders') && Schema::hasColumn('orders', 'seats')) {
                 $raw = DB::table('orders')
                     ->where('product_id', $product->id)
                     ->lockForUpdate()
                     ->pluck('seats')->all();
-                $taken = collect($raw)
-                    ->flatMap(function ($v) {
-                        if (is_array($v)) return $v;
-                        if (is_string($v) && $v !== '') {
-                            $j = json_decode($v, true);
-                            return is_array($j) ? $j : [];
-                        }
-                        return [];
-                    })
-                    ->filter(fn($s)=> is_string($s) && $s!=='')
-                    ->unique()->values()->all();
+
+                $taken = collect($raw)->flatMap(function ($v) {
+                    if (is_array($v)) return $v;
+                    if (is_string($v) && $v !== '') {
+                        $j = json_decode($v, true);
+                        return is_array($j) ? $j : [];
+                    }
+                    return [];
+                })->unique()->values()->all();
             }
 
-            // çakışma kontrolü
             $conflicts = array_values(array_intersect($seats, $taken));
             if (!empty($conflicts)) {
                 abort(response()->json([
-                    'status' => false,
-                    'message' => 'Seats already taken: '.implode(', ', $conflicts)
+                    'status'  => false,
+                    'message' => 'Seats already taken: '.implode(', ', $conflicts),
+                    'conflicts' => $conflicts,
                 ], 422));
             }
 
-            // sunucu tarafı fiyat hesapla
+            // 3) Siparişi oluştur
             $unit  = (float) $product->cost;
             $total = $unit * (int) $data['qty'];
 
-            // Sipariş kaydı
             $order = Order::create([
                 'user_id'               => optional($request->user())->id,
                 'product_id'            => $product->id,
@@ -135,24 +131,14 @@ class OrderController extends Controller
                 'passenger_nationality' => $data['passenger_nationality'] ?? 'TR',
                 'passenger_email'       => $data['passenger_email'] ?? null,
                 'passenger_phone'       => $data['passenger_phone'] ?? null,
-                'seats'                 => $seats, // casts=array ise JSON kaydedecek
+                'seats'                 => $seats,
                 'pnr'                   => strtoupper(Str::random(6)),
                 'status'                => 'paid',
             ]);
 
-            // order_items varsa tek tek ekle
-            if (Schema::hasTable('order_items')) {
-                foreach ($seats as $s) {
-                    DB::table('order_items')->insert([
-                        'order_id'   => $order->id,
-                        'product_id' => $product->id,
-                        'seats'      => json_encode([$s]),
-                        'qty'        => 1,
-                        'price'      => $unit,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
+            // 4) Bu rezervasyona ait hold’ları temizle
+            if (!empty($data['reservation_id'])) {
+                DB::table('seat_holds')->where('reservation_id', $data['reservation_id'])->delete();
             }
 
             return $order->load([

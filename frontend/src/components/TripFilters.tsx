@@ -53,23 +53,14 @@ export default function TripFilters({
 
     const safeCoreChange = (patch: Partial<CoreFilters>) => {
         const next = { ...core, ...patch };
-        // trim strings
         next.from = (next.from || "").trim();
         next.to = (next.to || "").trim();
         next.date = (next.date || "").trim();
 
-        // prevent identical from/to
-        if (patch.from !== undefined && next.from && next.from === next.to) {
-            next.to = "";
-        }
-        if (patch.to !== undefined && next.to && next.to === next.from) {
-            next.from = "";
-        }
+        if (patch.from !== undefined && next.from && next.from === next.to) next.to = "";
+        if (patch.to !== undefined && next.to && next.to === next.from) next.from = "";
 
-        // clamp date to valid format
-        if (patch.date !== undefined && next.date && !/^\d{4}-\d{2}-\d{2}$/.test(next.date)) {
-            next.date = "";
-        }
+        if (patch.date !== undefined && next.date && !/^\d{4}-\d{2}-\d{2}$/.test(next.date)) next.date = "";
 
         onCoreChange(next);
     };
@@ -94,11 +85,13 @@ export default function TripFilters({
 
     return (
         <>
-            <div className="rounded-2xl border bg-white p-4 shadow flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2" role="group" aria-label="Yolculuk tipi">
+            {/* BAR: mobilde dikey, md+ yatay */}
+            <div className="rounded-2xl bg-white p-4 shadow grid gap-3 md:grid-cols-[auto,1fr,auto] md:items-center">
+                {/* Yolculuk tipi */}
+                <div className="flex w-full gap-2" role="group" aria-label="Yolculuk tipi">
                     <button
                         type="button"
-                        className={`px-3 py-2 rounded-lg border ${core.tripType === "oneway" ? "bg-indigo-600 text-white" : ""}`}
+                        className={`w-1/2 md:w-auto px-3 py-2 rounded-lg border ${core.tripType === "oneway" ? "bg-indigo-600 text-white" : ""}`}
                         onClick={() => safeCoreChange({ tripType: "oneway" })}
                         aria-pressed={core.tripType === "oneway"}
                     >
@@ -106,7 +99,7 @@ export default function TripFilters({
                     </button>
                     <button
                         type="button"
-                        className={`px-3 py-2 rounded-lg border ${core.tripType === "roundtrip" ? "bg-indigo-600 text-white" : ""}`}
+                        className={`w-1/2 md:w-auto px-3 py-2 rounded-lg border ${core.tripType === "roundtrip" ? "bg-indigo-600 text-white" : ""}`}
                         onClick={() => safeCoreChange({ tripType: "roundtrip" })}
                         aria-pressed={core.tripType === "roundtrip"}
                     >
@@ -114,13 +107,12 @@ export default function TripFilters({
                     </button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <label className="sr-only" htmlFor="fromSel">
-                        Nereden
-                    </label>
+                {/* From / To / Date: mobilde 2 sütun, md+ yatay */}
+                <div className="grid grid-cols-2 gap-2 md:flex md:items-center">
+                    <label className="sr-only" htmlFor="fromSel">Nereden</label>
                     <select
                         id="fromSel"
-                        className="rounded-lg border px-3 py-2"
+                        className="col-span-2 md:col-span-1 w-full rounded-lg border px-3 py-2"
                         value={core.from}
                         onChange={(e) => safeCoreChange({ from: e.target.value })}
                         aria-label="Nereden"
@@ -135,7 +127,7 @@ export default function TripFilters({
 
                     <button
                         type="button"
-                        className="px-2 py-2 rounded-lg border"
+                        className="flex md:inline-flex items-center justify-center px-2 py-2 rounded-lg border"
                         onClick={swapFromTo}
                         title="Kalkış ↔ Varış değiştir"
                         aria-label="Kalkış ve varış yerlerini değiştir"
@@ -143,12 +135,10 @@ export default function TripFilters({
                         ↔
                     </button>
 
-                    <label className="sr-only" htmlFor="toSel">
-                        Nereye
-                    </label>
+                    <label className="sr-only" htmlFor="toSel">Nereye</label>
                     <select
                         id="toSel"
-                        className="rounded-lg border px-3 py-2"
+                        className="w-full rounded-lg border px-3 py-2"
                         value={core.to}
                         onChange={(e) => safeCoreChange({ to: e.target.value })}
                         aria-label="Nereye"
@@ -161,13 +151,11 @@ export default function TripFilters({
                         ))}
                     </select>
 
-                    <label className="sr-only" htmlFor="dateInp">
-                        Tarih
-                    </label>
+                    <label className="sr-only" htmlFor="dateInp">Tarih</label>
                     <input
                         id="dateInp"
                         type="date"
-                        className="rounded-lg border px-3 py-2"
+                        className="col-span-2 md:col-span-1 w-full rounded-lg border px-3 py-2"
                         value={core.date}
                         onChange={(e) => safeCoreChange({ date: e.target.value })}
                         min={todayStr}
@@ -175,35 +163,54 @@ export default function TripFilters({
                     />
                 </div>
 
-                <div className="ml-auto flex items-center gap-2">
+                {/* Aksiyonlar: mobilde sticky alt bar değil; üstte sığmazsa sarar */}
+                <div className="flex flex-wrap md:justify-end gap-2">
                     <button
                         type="button"
-                        className="px-3 py-2 rounded-lg border"
+                        className="px-3 py-2 rounded-lg border w-full sm:w-auto"
                         onClick={() => setOpen(true)}
                         aria-expanded={open}
                         aria-controls="filters-panel"
                     >
                         Filtre Detayı
                     </button>
-                    <button type="button" className="px-3 py-2 rounded-lg border" disabled={navDisabled} onClick={onPrevDay}>
+                    <button
+                        type="button"
+                        className="px-3 py-2 rounded-lg border w-full sm:w-auto"
+                        disabled={navDisabled}
+                        onClick={onPrevDay}
+                    >
                         Önceki Gün
                     </button>
-                    <button type="button" className="px-3 py-2 rounded-lg border" disabled={navDisabled} onClick={onNextDay}>
+                    <button
+                        type="button"
+                        className="px-3 py-2 rounded-lg border w-full sm:w-auto"
+                        disabled={navDisabled}
+                        onClick={onNextDay}
+                    >
                         Sonraki Gün
                     </button>
-                    <button type="button" className="px-3 py-2 rounded-lg border" onClick={onRefresh}>
+                    <button
+                        type="button"
+                        className="px-3 py-2 rounded-lg border w-full sm:w-auto"
+                        onClick={onRefresh}
+                    >
                         Yenile
                     </button>
                 </div>
             </div>
 
-            {/* DETAY PANELİ (YAN SAĞ) */}
+            {/* DETAY PANELİ: mobil tam ekran sağdan kayar, md+ max-w-md */}
             {open && (
                 <div className="fixed inset-0 z-50">
-                    <button className="absolute inset-0 bg-black/30" aria-label="Kapat" onClick={() => setOpen(false)} />
+                    <button
+                        className="absolute inset-0 bg-black/30"
+                        aria-label="Kapat"
+                        onClick={() => setOpen(false)}
+                    />
                     <div
                         id="filters-panel"
-                        className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl p-4 overflow-y-auto"
+                        className="absolute right-0 top-0 h-full w-full sm:max-w-md bg-white shadow-xl p-4 overflow-y-auto"
                         role="dialog"
                         aria-modal="true"
                         aria-label="Filtre Detayı"
@@ -221,7 +228,7 @@ export default function TripFilters({
                             {/* Kalkış saati */}
                             <section>
                                 <div className="text-sm font-semibold mb-2">Kalkış Saati Aralığı</div>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <div>
                                         <label className="block text-xs text-indigo-900/70 mb-1">Başlangıç</label>
                                         <input
@@ -246,7 +253,7 @@ export default function TripFilters({
                             {/* Varış saati */}
                             <section>
                                 <div className="text-sm font-semibold mb-2">Varış Saati Aralığı</div>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <div>
                                         <label className="block text-xs text-indigo-900/70 mb-1">Başlangıç</label>
                                         <input
@@ -271,7 +278,7 @@ export default function TripFilters({
                             {/* Fiyat */}
                             <section>
                                 <div className="text-sm font-semibold mb-2">Bilet Ücreti (₺)</div>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <div>
                                         <label className="block text-xs text-indigo-900/70 mb-1">En az</label>
                                         <input
@@ -302,7 +309,7 @@ export default function TripFilters({
                             {/* Düzen / Firma */}
                             <section>
                                 <div className="text-sm font-semibold mb-2">Otobüs Düzeni ve Firma</div>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <div>
                                         <label className="block text-xs text-indigo-900/70 mb-1">Otobüs Düzeni</label>
                                         <select
@@ -349,16 +356,11 @@ export default function TripFilters({
                                 </select>
                             </section>
 
-                            <div className="flex items-center justify-between gap-2">
-                                <button
-                                    className="px-3 py-2 rounded-lg border"
-                                    type="button"
-                                    onClick={clearAdv}
-                                    title="Tüm detay filtrelerini temizle"
-                                >
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                                <button className="px-3 py-2 rounded-lg border w-full sm:w-auto" type="button" onClick={clearAdv} title="Tüm detay filtrelerini temizle">
                                     Temizle
                                 </button>
-                                <button className="px-3 py-2 rounded-lg bg-indigo-600 text-white" onClick={() => setOpen(false)}>
+                                <button className="px-3 py-2 rounded-lg bg-indigo-600 text-white w-full sm:w-auto" onClick={() => setOpen(false)}>
                                     Filtreleri Uygula
                                 </button>
                             </div>

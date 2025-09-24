@@ -155,11 +155,11 @@ export default function PassengerOverview() {
                 { key: 'pnr', title: 'PNR' },
                 { key: 'Sefer', title: 'Sefer', map: (o: Order) => o.product?.trip ?? '' },
                 { key: 'Güzergah', title: 'Güzergah', map: (o: Order) => `${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}` },
-                { key: 'Kalkış', title: 'Kalkış', map: (o: Order) => fmtTR(o.product?.departure_time) },
+                { key: 'Kalkış', title: 'Kalkış', map: (o: Order) => fmtTR(o.product?.departure_time)},
                 { key: 'qty', title: 'Adet' },
                 { key: 'unit_price', title: 'Birim' },
                 { key: 'total', title: 'Toplam' },
-                { key: 'Sipariş Tarihi', title: 'Sipariş Tarihi', map: (o: Order) => fmtTR(o.created_at) },
+                { key: 'Sipariş Tarihi', title: 'Sipariş Tarihi', map: (o: Order) => fmtTR(o.created_at)},
             ];
             exportCSV('siparislerim_tumu', all, cols as any);
         }catch(e:any){

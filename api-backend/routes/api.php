@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\PeopleController;
+use App\Http\Controllers\SeatHoldController;
 use App\Http\Controllers\Admin\TripAnalyticsController;
 use App\Http\Controllers\PublicProductController;
 use Illuminate\Support\Facades\Route;
@@ -32,7 +34,9 @@ response()->json(
         ->orderBy('city')->orderBy('name')->get()
 )
 );
-
+Route::post('/seat-holds', [SeatHoldController::class,'store']);
+Route::delete('/seat-holds/{reservation}', [SeatHoldController::class,'destroy']);
+Route::post('/seat-holds/{reservation}/extend', [SeatHoldController::class,'extend']);
 // --- Auth (genel) ---
 Route::post('/register',[AuthController::class,'register']);
 Route::post('/login',[AuthController::class,'login']);
@@ -44,6 +48,9 @@ Route::prefix('admin')
     ->group(function () {
         Route::get('/trips/{product}/creator', [TripAnalyticsController::class, 'creator']);
         Route::get('/trips/{product}/buyers',  [TripAnalyticsController::class, 'buyers']);
+        Route::get('/customers', [PeopleController::class, 'customers']);
+        Route::get('/customers/{identifier}/orders', [PeopleController::class, 'customerOrders']);
+
     });
 
 Route::middleware('auth:sanctum')->group(function () {

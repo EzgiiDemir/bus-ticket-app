@@ -77,7 +77,7 @@ export default function TripList({
     };
 
     return (
-        <div className="rounded-2xl border bg-white p-4 shadow overflow-x-auto">
+        <div className="rounded-2xl bg-white p-4 shadow ">
             {/* Desktop */}
             <table className="hidden md:table min-w-[980px] w-full text-sm">
                 <thead>
