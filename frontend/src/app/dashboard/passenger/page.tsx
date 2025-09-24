@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '@/app/lib/api';               // AUTH + CORS doğru
+import { api } from '@/app/lib/api';
 import { myAppHook } from '../../../../context/AppProvider';
 import { fmtTR } from '@/app/lib/datetime';
 import { exportCSV, exportJSON } from '@/app/lib/export';
@@ -31,10 +31,11 @@ type PagePayload<T> = {
     prev_page_url?: string | null;
     from?: number | null;
     to?: number | null;
-    // Laravel alternatifleri:
-    links?: { next?: string|null }[] | any;
-    meta?: { total?: number; current_page?: number; last_page?: number; next_page_url?: string|null } | any;
+    links?: any;
+    meta?: { total?: number; current_page?: number; last_page?: number; next_page_url?: string|null; prev_page_url?: string|null } | any;
 };
+
+type ApiErr = { message?:string; errors?:Record<string, string[]|string> };
 
 /* ------------ Yardımcılar ------------ */
 const TRYc = new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:2});
@@ -43,37 +44,32 @@ const API_BASE = (process.env.NEXT_PUBLIC_API_URL||'').replace(/\/+$/,'');
 const toPath = (u?:string|null)=>{
     if(!u) return null;
     if(u.startsWith('/')) return u;
-    try{
-        const url = new URL(u);
-        return url.pathname + url.search;
-    }catch{
-        // API_BASE başına eklenmiş olabilir
-        if(API_BASE && u.startsWith(API_BASE)) return u.slice(API_BASE.length);
-        return u;
-    }
+    try{ const url = new URL(u); return url.pathname + url.search; }
+    catch{ return (API_BASE && u.startsWith(API_BASE)) ? u.slice(API_BASE.length) : u; }
 };
 
-function pickRows<T=any>(raw:any): { rows:T[]; total?:number; next?:string|null }{
-    if(!raw) return { rows:[], total:0, next:null };
-    // Dizi dönerse
-    if(Array.isArray(raw)) return { rows:raw, total:raw.length, next:null };
+function pickRows<T=any>(raw:any): { rows:T[]; total:number; next:string|null; prev:string|null }{
+    if(!raw) return { rows:[], total:0, next:null, prev:null };
+    if(Array.isArray(raw)) return { rows:raw, total:raw.length, next:null, prev:null };
 
-    // Standart paginate
     if(Array.isArray(raw.data)){
         const next = raw.next_page_url ?? raw?.links?.next ?? raw?.meta?.next_page_url ?? null;
-        const total = raw.total ?? raw?.meta?.total ?? raw.data.length;
-        return { rows: raw.data, total, next };
+        const prev = raw.prev_page_url ?? raw?.meta?.prev_page_url ?? null;
+        const total = Number(raw.total ?? raw?.meta?.total ?? raw.data.length);
+        return { rows: raw.data, total, next, prev };
     }
 
-    // Nesne içinde orders alanı
     if(Array.isArray(raw.orders)){
         const next = raw.next_page_url ?? null;
-        const total = raw.total ?? raw.orders.length;
-        return { rows: raw.orders, total, next };
+        const prev = raw.prev_page_url ?? null;
+        const total = Number(raw.total ?? raw.orders.length);
+        return { rows: raw.orders, total, next, prev };
     }
 
-    return { rows:[], total:0, next:null };
+    return { rows:[], total:0, next:null, prev:null };
 }
+
+const clamp = (n:number,min:number,max:number)=> Math.max(min, Math.min(max, n));
 
 /* ------------ Bileşen ------------ */
 export default function PassengerOverview() {
@@ -81,7 +77,9 @@ export default function PassengerOverview() {
 
     const [latest, setLatest] = useState<Order[]>([]);
     const [summary, setSummary] = useState<{ orders: number; spent: number }>({ orders: 0, spent: 0 });
+
     const [err, setErr] = useState('');
+    const [banner, setBanner] = useState('');
 
     const [page, setPage] = useState<PagePayload<Order> | null>(null);
     const [loadingPage, setLoadingPage] = useState(false);
@@ -92,28 +90,30 @@ export default function PassengerOverview() {
         []
     );
 
-    // Ortak GET (AUTH zorunlu)
-    async function getJSON<T=any>(pathOrAbs:string, params?:Record<string,any>):Promise<T>{
+    async function getJSON<T=any>(pathOrAbs:string):Promise<T>{
         const path = toPath(pathOrAbs) || pathOrAbs;
-        const res = await api.get(path, token);           // Bearer token ile
-        // params için: path zaten query içeriyorsa parse edilmiştir, ilk çağrıda per_page ekliyoruz
+        const res = await api.get(path, token);
         return api.json<T>(res);
     }
 
-    // İlk özet + son 5
+    // Özet + son 5
     useEffect(() => {
         if (isLoading || !token) return;
         (async()=>{
-            setErr('');
+            setErr(''); setBanner('');
             try{
-                const res = await api.get('/orders?per_page='+perPage, token);
+                const p = clamp(perPage,5,100);
+                const res = await api.get('/orders?per_page='+p, token);
                 const data = await api.json<any>(res);
                 const { rows, total } = pickRows<Order>(data);
-                setLatest(rows.slice(0,5));
-                const spent = rows.reduce((s,x)=> s + Number(x.total||0), 0);
-                setSummary({ orders: Number(total||rows.length), spent });
+                const safeRows = Array.isArray(rows) ? rows : [];
+                setLatest(safeRows.slice(0,5));
+                const spent = safeRows.reduce((s,x)=> s + Number(x.total||0), 0);
+                setSummary({ orders: Number(total||safeRows.length), spent });
+                setBanner(`Toplam ${Number(total||safeRows.length)} sipariş, son ${safeRows.slice(0,5).length} listelendi.`);
             } catch(e:any){
-                setErr(e?.message || 'Veri alınamadı');
+                const p:ApiErr|undefined = e?.response?.data;
+                setErr(p?.message || e?.message || 'Veri alınamadı');
             }
         })();
     }, [isLoading, token, perPage]);
@@ -121,25 +121,30 @@ export default function PassengerOverview() {
     // Sayfalı liste
     const load = async (url?: string) => {
         if (isLoading || !token) return;
-        setLoadingPage(true); setErr('');
+        setLoadingPage(true); setErr(''); setBanner('');
         try{
-            const data = url ? await getJSON<PagePayload<Order>>(url) : await getJSON<PagePayload<Order>>('/orders?per_page='+perPage);
+            const data = url ? await getJSON<PagePayload<Order>>(url)
+                : await getJSON<PagePayload<Order>>('/orders?per_page='+clamp(perPage,5,100));
             setPage(data);
+            const { total } = pickRows<Order>(data);
+            setBanner(`Sayfa yüklendi. Toplam ${Number(total||0)} kayıt.`);
         } catch(e:any){
-            setErr(e?.message || 'Veri alınamadı');
+            const p:ApiErr|undefined = e?.response?.data;
+            setErr(p?.message || e?.message || 'Veri alınamadı');
         } finally{
             setLoadingPage(false);
         }
     };
 
-    useEffect(() => { if (!isLoading && token) load(); }, [isLoading, token, perPage]);
+    useEffect(() => { if (!isLoading && token) void load(); }, [isLoading, token, perPage]);
 
-    // Tüm siparişleri CSV – AUTH ile sayfa sayfa çek
+    // Tüm siparişleri CSV
     const exportAllCSV = async () => {
+        if(!token) return;
         try{
             let url: string | null = `/orders?per_page=100`;
             const all: Order[] = [];
-            for(let i=0;i<100;i++){ // sert üst limit
+            for(let i=0;i<100;i++){
                 const data = await getJSON<any>(url);
                 const { rows, next } = pickRows<Order>(data);
                 all.push(...rows);
@@ -158,7 +163,8 @@ export default function PassengerOverview() {
             ];
             exportCSV('siparislerim_tumu', all, cols as any);
         }catch(e:any){
-            alert(e?.message || 'Dışa aktarma hatası');
+            const p:ApiErr|undefined = e?.response?.data;
+            alert(p?.message || e?.message || 'Dışa aktarma hatası');
         }
     };
 
@@ -166,10 +172,14 @@ export default function PassengerOverview() {
     if (!token) return <div className="p-6">Giriş yapın.</div>;
 
     const latestRows = latest;
+    const { rows:pageRows, total, next, prev } = pickRows<Order>(page as any);
 
     return (
         <div className="space-y-6 text-indigo-900">
             <h1 className="text-2xl font-bold text-indigo-900">Genel Bakış</h1>
+
+            {banner && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{banner}</div>}
+            {err &&    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Card title="Toplam Sipariş" value={summary.orders} />
@@ -180,84 +190,12 @@ export default function PassengerOverview() {
                         <div className="text-sm text-indigo-900/80 mt-1">Tüm siparişlerin tamamı</div>
                     </div>
                     <div className="flex gap-2">
-                        <button className="px-3 py-2 rounded-lg border" onClick={exportAllCSV}>CSV</button>
+                        <button className="px-3 py-2 rounded-lg border disabled:opacity-50" onClick={exportAllCSV} disabled={isLoading}>CSV</button>
                         <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('ozet', summary)}>JSON</button>
                     </div>
                 </div>
             </div>
 
-            <div className="rounded-2xl border bg-white p-4">
-                <div className="flex items-center justify-between mb-2">
-                    <h2 className="font-semibold">Son Siparişler (5)</h2>
-                    <div className="flex items-center gap-2">
-                        <select className="rounded-lg border px-2 py-1" value={perPage} onChange={e=>setPerPage(Number(e.target.value))}>
-                            {[5,10,20,50].map(n=> <option key={n} value={n}>{n}/sayfa</option>)}
-                        </select>
-                        <button className="px-3 py-2 rounded-lg border" onClick={()=>load()}>Yenile</button>
-                    </div>
-                </div>
-
-                {/* Mobil */}
-                <div className="md:hidden space-y-3">
-                    {latestRows.map(o=>(
-                        <div key={o.id} className="rounded-xl border p-3">
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="font-medium">{o.product?.trip ?? '-'}</div>
-                                <div className="text-xs font-mono">{o.pnr}</div>
-                            </div>
-                            <div className="mt-2 text-sm grid grid-cols-2 gap-y-1">
-                                <div className="text-indigo-900/60">Güzergah</div>
-                                <div>{o.product?.terminal_from} → {o.product?.terminal_to}</div>
-                                <div className="text-indigo-900/60">Kalkış</div>
-                                <div>{fmtTR(o.product?.departure_time)}</div>
-                                <div className="text-indigo-900/60">Adet</div>
-                                <div>{o.qty}</div>
-                                <div className="text-indigo-900/60">Toplam</div>
-                                <div className="font-semibold">{TRYc.format(Number(o.total||0))}</div>
-                                <div className="text-indigo-900/60">Tarih</div>
-                                <div>{fmtTR(o.created_at)}</div>
-                            </div>
-                        </div>
-                    ))}
-                    {!latestRows.length && <div className="text-center text-indigo-900/50">Kayıt yok</div>}
-                </div>
-
-                {/* Desktop */}
-                <div className="overflow-x-auto hidden md:block">
-                    <table className="min-w-[900px] w-full text-sm">
-                        <thead>
-                        <tr className="text-left text-indigo-900/60">
-                            <th className="py-2">PNR</th>
-                            <th>Sefer</th>
-                            <th>Güzergah</th>
-                            <th>Kalkış</th>
-                            <th>Adet</th>
-                            <th>Toplam</th>
-                            <th>Tarih</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {latestRows.map((o) => (
-                            <tr key={o.id} className="border-t">
-                                <td className="py-2 font-mono">{o.pnr}</td>
-                                <td className="font-medium">{o.product?.trip ?? '-'}</td>
-                                <td>{o.product?.terminal_from} → {o.product?.terminal_to}</td>
-                                <td>{fmtTR(o.product?.departure_time)}</td>
-                                <td>{o.qty}</td>
-                                <td className="font-semibold">{TRYc.format(Number(o.total || 0))}</td>
-                                <td>{fmtTR(o.created_at)}</td>
-                            </tr>
-                        ))}
-                        {!latestRows.length && (
-                            <tr><td colSpan={7} className="py-6 text-center text-indigo-900/50">Kayıt yok</td></tr>
-                        )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {loadingPage && <div className="mt-3 text-sm text-gray-500">Yükleniyor…</div>}
-                {!!err && <div className="mt-3 text-sm text-red-600">{err}</div>}
-            </div>
         </div>
     );
 }

@@ -3,12 +3,26 @@
 import React, { useEffect, useMemo, useState, FormEvent, ChangeEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { myAppHook } from "../../../context/AppProvider";
-import { Bus, Eye, EyeOff, User2, Shield } from "lucide-react";
+import { Bus, Eye, EyeOff } from "lucide-react";
 import { BASE } from "./../lib/api";
 
 type Role = "passenger" | "personnel";
-type FormData = { name?:string; email:string; password:string; password_confirmation?:string; role:Role; company_id?: number };
+type FormData = {
+    name?: string;
+    email: string;
+    password: string;
+    password_confirmation?: string;
+    role: Role;
+    company_id?: number;
+};
 
+type Errors = Partial<Record<keyof FormData | "base", string>>;
+
+const EMAIL_RE =
+    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+// En az 8 karakter, en az bir harf ve bir rakam
+const PWD_RE =
+    /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d\S]{8,}$/;
 
 export default function Auth() {
     const { login, register, isLoading } = myAppHook() as any;
@@ -28,32 +42,93 @@ export default function Auth() {
         password_confirmation: "",
         role: "passenger",
     });
-    const [companies, setCompanies] = useState<{id:number;name:string;code:string}[]>([]);
-    useEffect(()=>{ fetch(`${BASE}/public/companies`).then(r=>r.json()).then(setCompanies).catch(()=>{}); },[]);
 
-    const onChange = (e: ChangeEvent<HTMLInputElement|HTMLSelectElement>) => {
+    const [errors, setErrors] = useState<Errors>({});
+    const [companies, setCompanies] = useState<{ id: number; name: string; code: string }[]>([]);
+
+    useEffect(() => {
+        fetch(`${BASE}/public/companies`)
+            .then((r) => r.json())
+            .then(setCompanies)
+            .catch(() => {});
+    }, []);
+
+    const onChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target as any;
-        setFormData(s => ({ ...s, [name]: name==='company_id' ? Number(value) || undefined : value }));
+        const v =
+            name === "company_id" ? (value ? Number(value) : undefined) : name === "email" ? value.trim() : value;
+        setFormData((s) => ({ ...s, [name]: v }));
+        // Alan bazlı anlık doğrulama
+        setErrors((prev) => {
+            const next = { ...prev };
+            delete next[name as keyof Errors];
+            return next;
+        });
     };
 
+    const validate = (data: FormData, isLoginMode: boolean): Errors => {
+        const e: Errors = {};
+        if (!isLoginMode) {
+            if (!data.name || data.name.trim().length < 2) e.name = "Ad Soyad en az 2 karakter olmalı.";
+            if (data.role !== "passenger" && data.role !== "personnel") e.role = "Geçerli bir rol seçin.";
+            if (data.role === "personnel" && !data.company_id) e.company_id = "Firma seçimi zorunludur.";
+            if (!data.password_confirmation) e.password_confirmation = "Şifre tekrar zorunlu.";
+            if (data.password && data.password_confirmation && data.password !== data.password_confirmation)
+                e.password_confirmation = "Şifreler eşleşmiyor.";
+        }
+        if (!data.email || !EMAIL_RE.test(data.email)) e.email = "Geçerli bir e-posta girin.";
+        if (!data.password || !PWD_RE.test(data.password))
+            e.password = "Şifre en az 8 karakter olmalı ve en az bir harf ile bir rakam içermeli.";
+        return e;
+    };
 
     const onSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        if (isLogin) {
-            await login(formData.email, formData.password);
-            return;
-        }
-        await register(
-            formData.name ?? "",
-            formData.email,
-            formData.password,
-            formData.password_confirmation ?? "",
-            formData.role,
-            formData.company_id
-        );
+        const trimmed: FormData = {
+            ...formData,
+            name: formData.name?.trim(),
+            email: formData.email.trim().toLowerCase(),
+        };
+        const v = validate(trimmed, isLogin);
+        setErrors(v);
+        if (Object.keys(v).length > 0) return;
 
-        setIsLogin(true);
+        try {
+            if (isLogin) {
+                await login(trimmed.email, trimmed.password);
+                return;
+            }
+            await register(
+                trimmed.name ?? "",
+                trimmed.email,
+                trimmed.password,
+                trimmed.password_confirmation ?? "",
+                trimmed.role,
+                trimmed.company_id
+            );
+            setIsLogin(true);
+        } catch (err: any) {
+            // Laravel 422 formatı: { message, errors: { field: [msg] } }
+            const srv: Errors = {};
+            const payload = err?.response?.data;
+            if (payload?.errors && typeof payload.errors === "object") {
+                Object.entries(payload.errors).forEach(([k, msgs]) => {
+                    const first = Array.isArray(msgs) ? msgs[0] : String(msgs);
+                    srv[k as keyof Errors] = first;
+                });
+            } else if (payload?.message) {
+                srv.base = payload.message;
+            } else {
+                srv.base = "İşlem sırasında beklenmeyen bir hata oluştu.";
+            }
+            setErrors(srv);
+        }
     };
+
+    const fieldCls = (hasErr: boolean) =>
+        `w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200 ${
+            hasErr ? "border-red-500" : "border-gray-300"
+        }`;
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex items-center text-indigo-900">
@@ -64,14 +139,11 @@ export default function Auth() {
                             <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow">
                                 <Bus size={22} />
                             </div>
-                            <h1 className="mt-6 text-3xl font-extrabold tracking-tight text-indigo-900">
-                                BusX’e hoş geldiniz
-                            </h1>
+                            <h1 className="mt-6 text-3xl font-extrabold tracking-tight text-indigo-900">BusX’e hoş geldiniz</h1>
                             <p className="mt-3 text-indigo-900/70 leading-relaxed">
-                                Türkiye’nin dört bir yanındaki otobüs seferlerini keşfedin, hesabınızı oluşturun ve
-                                biletinizi saniyeler içinde satın alın. Güvenli ödeme, anında PNR.
+                                Türkiye’nin dört bir yanındaki otobüs seferlerini keşfedin, hesabınızı oluşturun ve biletinizi
+                                saniyeler içinde satın alın. Güvenli ödeme, anında PNR.
                             </p>
-
                             <ul className="mt-6 space-y-3 text-sm text-indigo-900/80">
                                 <li className="flex items-center gap-2">
                                     <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
@@ -96,7 +168,10 @@ export default function Auth() {
                                     className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition ${
                                         isLogin ? "bg-white text-indigo-700 shadow" : "text-indigo-900/70 hover:text-indigo-900"
                                     }`}
-                                    onClick={() => setIsLogin(true)}
+                                    onClick={() => {
+                                        setErrors({});
+                                        setIsLogin(true);
+                                    }}
                                     type="button"
                                 >
                                     Giriş Yap
@@ -105,7 +180,10 @@ export default function Auth() {
                                     className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition ${
                                         !isLogin ? "bg-white text-indigo-700 shadow" : "text-indigo-900/70 hover:text-indigo-900"
                                     }`}
-                                    onClick={() => setIsLogin(false)}
+                                    onClick={() => {
+                                        setErrors({});
+                                        setIsLogin(false);
+                                    }}
                                     type="button"
                                 >
                                     Kayıt Ol
@@ -117,13 +195,18 @@ export default function Auth() {
                                     {isLogin ? "Hesabınıza giriş yapın" : "Yeni hesap oluşturun"}
                                 </h2>
                                 <p className="text-sm text-indigo-900/60 mt-1">
-                                    {isLogin
-                                        ? "E-postanız ve şifrenizle devam edin."
-                                        : "Bilgilerinizi doldurun; rolünüze göre panelinize yönlendirelim."}
+                                    {isLogin ? "E-posta ve şifrenizle devam edin." : "Bilgilerinizi girin, rolünüze göre yönlendirelim."}
                                 </p>
                             </div>
 
+                            {/* HTML5 doğrulamaları devrede: pattern, required, minLength. */}
                             <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+                                {errors.base && (
+                                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                        {errors.base}
+                                    </div>
+                                )}
+
                                 {!isLogin && (
                                     <>
                                         <div>
@@ -135,9 +218,17 @@ export default function Auth() {
                                                 onChange={onChange}
                                                 placeholder="Örn. Ezgi Demir"
                                                 autoComplete="name"
-                                                className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200"
+                                                minLength={2}
                                                 required
+                                                aria-invalid={!!errors.name}
+                                                aria-describedby="name-err"
+                                                className={fieldCls(!!errors.name)}
                                             />
+                                            {errors.name && (
+                                                <p id="name-err" className="mt-1 text-xs text-red-600">
+                                                    {errors.name}
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div>
@@ -145,7 +236,7 @@ export default function Auth() {
                                             <div className="grid grid-cols-2 gap-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => setFormData((s) => ({ ...s, role: "passenger" }))}
+                                                    onClick={() => setFormData((s) => ({ ...s, role: "passenger", company_id: undefined }))}
                                                     className={`rounded-xl border px-3 py-2 text-sm font-medium ${
                                                         formData.role === "passenger"
                                                             ? "border-indigo-500 bg-indigo-50 text-indigo-700"
@@ -166,17 +257,35 @@ export default function Auth() {
                                                     Personel
                                                 </button>
                                             </div>
+                                            {errors.role && <p className="mt-1 text-xs text-red-600">{errors.role}</p>}
                                         </div>
                                     </>
                                 )}
-                                {!isLogin && formData.role==='personnel' && (
+
+                                {!isLogin && formData.role === "personnel" && (
                                     <div>
                                         <label className="block text-sm font-medium text-indigo-900 mb-1">Bağlı Olduğunuz Firma</label>
-                                        <select name="company_id" value={formData.company_id ?? ''} onChange={onChange}
-                                                className="w-full rounded-xl border px-3 py-2">
+                                        <select
+                                            name="company_id"
+                                            value={formData.company_id ?? ""}
+                                            onChange={onChange}
+                                            required
+                                            aria-invalid={!!errors.company_id}
+                                            aria-describedby="company-err"
+                                            className={fieldCls(!!errors.company_id)}
+                                        >
                                             <option value="">Seçiniz</option>
-                                            {companies.map(c=> <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+                                            {companies.map((c) => (
+                                                <option key={c.id} value={c.id}>
+                                                    {c.name} ({c.code})
+                                                </option>
+                                            ))}
                                         </select>
+                                        {errors.company_id && (
+                                            <p id="company-err" className="mt-1 text-xs text-red-600">
+                                                {errors.company_id}
+                                            </p>
+                                        )}
                                     </div>
                                 )}
 
@@ -189,9 +298,17 @@ export default function Auth() {
                                         onChange={onChange}
                                         placeholder="ornek@eposta.com"
                                         autoComplete="email"
-                                        className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200"
                                         required
+                                        pattern={EMAIL_RE.source}
+                                        aria-invalid={!!errors.email}
+                                        aria-describedby="email-err"
+                                        className={fieldCls(!!errors.email)}
                                     />
+                                    {errors.email && (
+                                        <p id="email-err" className="mt-1 text-xs text-red-600">
+                                            {errors.email}
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -204,8 +321,11 @@ export default function Auth() {
                                             onChange={onChange}
                                             placeholder="••••••••"
                                             autoComplete={isLogin ? "current-password" : "new-password"}
-                                            className="w-full rounded-xl border px-3 py-2 pr-10 outline-none focus:ring-2 focus:ring-indigo-200"
                                             required
+                                            pattern={PWD_RE.source}
+                                            aria-invalid={!!errors.password}
+                                            aria-describedby="pwd-err"
+                                            className={`${fieldCls(!!errors.password)} pr-10`}
                                         />
                                         <button
                                             type="button"
@@ -216,6 +336,11 @@ export default function Auth() {
                                             {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
                                         </button>
                                     </div>
+                                    {errors.password && (
+                                        <p id="pwd-err" className="mt-1 text-xs text-red-600">
+                                            {errors.password}
+                                        </p>
+                                    )}
                                 </div>
 
                                 {!isLogin && (
@@ -229,8 +354,10 @@ export default function Auth() {
                                                 onChange={onChange}
                                                 placeholder="••••••••"
                                                 autoComplete="new-password"
-                                                className="w-full rounded-xl border px-3 py-2 pr-10 outline-none focus:ring-2 focus:ring-indigo-200"
                                                 required
+                                                aria-invalid={!!errors.password_confirmation}
+                                                aria-describedby="pwd2-err"
+                                                className={`${fieldCls(!!errors.password_confirmation)} pr-10`}
                                             />
                                             <button
                                                 type="button"
@@ -241,6 +368,11 @@ export default function Auth() {
                                                 {showPwd2 ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
                                         </div>
+                                        {errors.password_confirmation && (
+                                            <p id="pwd2-err" className="mt-1 text-xs text-red-600">
+                                                {errors.password_confirmation}
+                                            </p>
+                                        )}
                                     </div>
                                 )}
 
@@ -260,7 +392,10 @@ export default function Auth() {
                                         <button
                                             type="button"
                                             className="font-semibold text-indigo-700 hover:underline"
-                                            onClick={() => setIsLogin(false)}
+                                            onClick={() => {
+                                                setErrors({});
+                                                setIsLogin(false);
+                                            }}
                                         >
                                             Kayıt Ol
                                         </button>
@@ -271,7 +406,10 @@ export default function Auth() {
                                         <button
                                             type="button"
                                             className="font-semibold text-indigo-700 hover:underline"
-                                            onClick={() => setIsLogin(true)}
+                                            onClick={() => {
+                                                setErrors({});
+                                                setIsLogin(true);
+                                            }}
                                         >
                                             Giriş Yap
                                         </button>

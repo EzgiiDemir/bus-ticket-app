@@ -5,20 +5,32 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ef1886e3-1d19-471a-a296-452f827323e0" name="Changes" comment="last update">
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Footer.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/PurchaseModal.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/TripFilters.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/TripList.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/routes/api.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/routes/api.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/OrderController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/OrderController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Middleware/AdminOnly.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Middleware/AdminOnly.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Middleware/PersonnelActive.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Middleware/PersonnelActive.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/context/AppProvider.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/context/AppProvider.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/auth/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/auth/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/account/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/account/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/approvals/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/approvals/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/trips/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/orders/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/orders/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/profile/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/profile/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/trips/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/account/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/account/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/company/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/company/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/customers/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/history/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/history/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/orders/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/orders/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/trips/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/lib/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/lib/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/lib/export.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/lib/export.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/PurchaseModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/PurchaseModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/TripFilters.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/TripFilters.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/TripList.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/TripList.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,19 +52,19 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
     <option name="SIGN_OFF_COMMIT" value="true" />
   </component>
-  <component name="GitHubPullRequestSearchHistory">{
-        &quot;lastFilter&quot;: {
-        &quot;state&quot;: &quot;OPEN&quot;,
-        &quot;assignee&quot;: &quot;EzgiiDemir&quot;
-        }
-        }</component>
-  <component name="GithubPullRequestsUISettings">{
-        &quot;selectedUrlAndAccountId&quot;: {
-        &quot;url&quot;: &quot;https://github.com/EzgiiDemir/bus-ticket-app.git&quot;,
-        &quot;accountId&quot;: &quot;566f2a24-be82-4617-b8d4-9d58045aa6dd&quot;
-        }
-        }</component>
-  <component name="PhpWorkspaceProjectConfiguration" interpreter_name="$PROJECT_DIR$/../../../../wamp64/bin/php/php8.3.14/php.exe">
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "EzgiiDemir"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/EzgiiDemir/bus-ticket-app.git",
+    "accountId": "7e4ed5c0-86be-43e3-84fd-ed75bd7d0c9b"
+  }
+}]]></component>
+  <component name="PhpWorkspaceProjectConfiguration" interpreter_name="$PROJECT_DIR$/../../../../tools/php82/php.exe">
     <include_path>
       <path value="$PROJECT_DIR$/api-backend/vendor/brick/math" />
       <path value="$PROJECT_DIR$/api-backend/vendor/symfony/yaml" />
@@ -181,25 +193,25 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-        &quot;keyToString&quot;: {
-        &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-        &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-        &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-        &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-        &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-        &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
-        &quot;last_opened_file_path&quot;: &quot;C:/Users/Ezgi/Desktop/bus-ticket-app&quot;,
-        &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-        &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-        &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-        &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-        &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-        &quot;settings.editor.selected.configurable&quot;: &quot;vcs.Git&quot;,
-        &quot;ts.external.directory.path&quot;: &quot;C:\\Users\\Ezgi\\Desktop\\bus-ticket-app\\frontend\\node_modules\\typescript\\lib&quot;,
-        &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
-        }
-        }</component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "C:/Users/Ezgi/Desktop/bus-ticket-app",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable",
+    "ts.external.directory.path": "C:\\Users\\ezgi.demir\\Desktop\\crud\\frontend\\node_modules\\typescript\\lib",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\ezgi.demir\Desktop\crud\frontend\public" />
@@ -214,8 +226,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-f27c65a3e318-JavaScript-PS-251.23774.466" />
-        <option value="bundled-php-predefined-a98d8de5180a-aaeaa8632555-com.jetbrains.php.sharedIndexes-PS-251.23774.466" />
+        <option value="bundled-js-predefined-d6986cc7102b-b598e85cdad2-JavaScript-PS-252.25557.128" />
+        <option value="bundled-php-predefined-a98d8de5180a-ce40d0652d34-com.jetbrains.php.sharedIndexes-PS-252.25557.128" />
       </set>
     </attachedChunks>
   </component>
@@ -232,6 +244,7 @@
       <workItem from="1758487262479" duration="312000" />
       <workItem from="1758487902733" duration="1120000" />
       <workItem from="1758550985123" duration="12181000" />
+      <workItem from="1758605332699" duration="17631000" />
     </task>
     <task id="LOCAL-00001" summary="fronted update">
       <option name="closed" value="true" />

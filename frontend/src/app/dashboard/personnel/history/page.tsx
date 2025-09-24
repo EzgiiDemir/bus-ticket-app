@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
 import { myAppHook } from '../../../../../context/AppProvider';
 import { exportCSV } from '@/app/lib/export';
 
+/* ---------- Tipler ---------- */
 type Trip = {
     id:number;
     trip?: string;
@@ -12,7 +13,7 @@ type Trip = {
     terminal_from:string;
     terminal_to:string;
     departure_time:string;
-    cost:number;
+    cost:number|string;
     capacity_reservation:number;
     is_active:number|boolean;
     note?:string;
@@ -21,52 +22,86 @@ type Trip = {
     route?: { name:string; time?:string }[];
     created_at?:string;
 };
-
 type Passenger = {
     id:number;
     passenger_name:string;
     passenger_email?:string;
     passenger_phone?:string;
     qty:number;
-    seats?:string[];   // backend yoksa boş dizi gelebilir
+    seats?:string[];
     pnr:string;
     created_at:string;
 };
+type PageResp<T> = {
+    data:T[];
+    total?:number;
+    current_page?:number;
+    last_page?:number;
+    next_page_url?:string|null;
+    prev_page_url?:string|null;
+};
+type ApiErr = { message?:string; errors?:Record<string, string[]|string> };
 
+/* ---------- Yardımcılar ---------- */
+const toISO = (s?:string) => s ? (s.includes('T') ? s : s.replace(' ','T')) : '';
+const fmtTR = (iso?:string) =>
+    iso ? new Date(iso).toLocaleString('tr-TR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+const fmtTL = (n:any) =>
+    new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 }).format(Number((typeof n==='string'?n.replace(',','.') : n) || 0));
+
+/* ---------- Sayfa ---------- */
 export default function HistoryPage(){
-    const { token, isLoading } = myAppHook() as any;
+    const { token, isLoading, user } = (myAppHook() as any) || {};
 
     const [rows,setRows]=useState<Trip[]>([]);
     const [q,setQ]=useState('');
     const [tab,setTab]=useState<'all'|'past'|'upcoming'>('all');
 
-    // pagination (liste)
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
 
-    // passengers modal state
+    // modal
     const [showPassengers,setShowPassengers]=useState<Trip|null>(null);
     const [passengers,setPassengers]=useState<Passenger[]>([]);
     const [pPage,setPPage]=useState(1);
     const [pPerPage,setPPerPage]=useState(10);
     const [pTotal,setPTotal]=useState(0);
 
-    useEffect(()=>{
-        if (isLoading || !token) return;
-        axios.get('/products') // personelin oluşturduğu tüm seferler
-            .then(r=> setRows(r.data?.products ?? []))
-            .catch(()=> setRows([]));
-    },[isLoading, token]);
+    // ui state
+    const [loading,setLoading]=useState(true);
+    const [err,setErr]=useState('');
+    const [banner,setBanner]=useState('');
 
-    const now = new Date().toISOString();
+    const refresh = useCallback(async ()=>{
+        if(!token) { setLoading(false); return; }
+        setLoading(true); setErr(''); setBanner('');
+        try{
+            const { data } = await axios.get<{products:Trip[]}|Trip[]>('/products', { headers:{ Accept:'application/json' } });
+            const list = Array.isArray(data) ? data : (data?.products ?? []);
+            setRows(list);
+            setBanner(`Toplam ${list.length} sefer yüklendi.`);
+        }catch(e:any){
+            const p:ApiErr|undefined = e?.response?.data;
+            setErr(p?.message || 'Seferler alınamadı.');
+            setRows([]);
+        }finally{
+            setLoading(false);
+        }
+    },[token]);
+
+    useEffect(()=>{ if(!isLoading) void refresh(); },[isLoading, refresh]);
+
+    // filtreleme
+    const nowISO = useMemo(()=> new Date().toISOString(), []);
     const filtered = useMemo(()=>{
         let arr = rows;
-        if (tab==='past')     arr = rows.filter(r => (r.departure_time||'') <  now);
-        if (tab==='upcoming') arr = rows.filter(r => (r.departure_time||'') >= now);
+        if (tab==='past')     arr = rows.filter(r => toISO(r.departure_time) <  nowISO);
+        if (tab==='upcoming') arr = rows.filter(r => toISO(r.departure_time) >= nowISO);
         const s = q.trim().toLowerCase();
         return s ? arr.filter(r => JSON.stringify(r).toLowerCase().includes(s)) : arr;
-    },[rows, tab, q, now]);
+    },[rows, tab, q, nowISO]);
 
+    // sayfalama (liste)
     const total = filtered.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     useEffect(()=>{ if(page>totalPages) setPage(Math.max(1,totalPages)); },[totalPages,page]);
@@ -75,17 +110,26 @@ export default function HistoryPage(){
         return filtered.slice(start, start+pageSize);
     },[filtered,page,pageSize]);
 
-    const openPassengers = async (trip:Trip, toPage=1) => {
+    // yolcular modal
+    const openPassengers = useCallback(async (trip:Trip, toPage=1) => {
         try{
-            const { data } = await axios.get(`/products/${trip.id}/orders`, { params:{ per_page:pPerPage, page:toPage } });
-            setPassengers(data?.data ?? []);
-            setPTotal(Number(data?.total ?? (data?.data?.length || 0)));
-            setPPage(Number(data?.current_page ?? toPage));
+            const { data } = await axios.get<PageResp<Passenger>>(`/products/${trip.id}/orders`, {
+                params:{ per_page:pPerPage, page:toPage },
+                headers:{ Accept:'application/json' }
+            });
+            const list = Array.isArray((data as any)?.data) ? (data as any).data : (Array.isArray(data) ? (data as any as Passenger[]) : []);
+            setPassengers(list);
+            setPTotal(Number((data as any)?.total ?? list.length));
+            setPPage(Number((data as any)?.current_page ?? toPage));
             setShowPassengers(trip);
         }catch(e:any){
-            alert(e?.response?.data?.message || 'Yolcular alınamadı');
+            const p:ApiErr|undefined = e?.response?.data;
+            alert(p?.message || 'Yolcular alınamadı');
         }
-    };
+    },[pPerPage]);
+
+    if (isLoading) return <div className="p-6">Yükleniyor…</div>;
+    if (!token)    return <div className="p-6">Giriş yapın.</div>;
 
     return (
         <div className="space-y-4 text-indigo-900/80">
@@ -97,12 +141,15 @@ export default function HistoryPage(){
                         placeholder="Ara..."
                         value={q}
                         onChange={e=>{ setQ(e.target.value); setPage(1); }}
+                        aria-label="Sefer ara"
                     />
-                    <div className="flex rounded-xl border overflow-hidden">
+                    <div className="flex rounded-xl border overflow-hidden" role="tablist" aria-label="Filtre">
                         {(['all','past','upcoming'] as const).map(t=>(
                             <button key={t}
                                     onClick={()=>{ setTab(t); setPage(1); }}
-                                    className={`px-3 py-2 text-sm ${tab===t?'bg-indigo-600 text-white':'bg-white'}`}>
+                                    className={`px-3 py-2 text-sm ${tab===t?'bg-indigo-600 text-white':'bg-white'}`}
+                                    role="tab" aria-selected={tab===t}
+                            >
                                 {t==='all'?'Tümü':t==='past'?'Geçmiş':'Yaklaşan'}
                             </button>
                         ))}
@@ -115,14 +162,18 @@ export default function HistoryPage(){
                             { key:'terminal_to', title:'Varış' },
                             { key:'departure_time', title:'Kalkış' },
                             { key:'created_at', title:'Oluşturulma' },
-                            { key:'cost', title:'Ücret' },
+                            { key:'cost', title:'Ücret', map:(r:Trip)=> Number((r as any).cost||0) },
                             { key:'capacity_reservation', title:'Kapasite' },
                         ])}
-                        className="rounded-xl border px-4 py-2">
+                        className="rounded-xl border px-4 py-2"
+                    >
                         CSV
                     </button>
                 </div>
             </div>
+
+            {banner && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{banner}</div>}
+            {err &&    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
 
             {/* Desktop */}
             <div className="hidden md:block rounded-2xl border bg-white p-4">
@@ -164,7 +215,7 @@ export default function HistoryPage(){
                 </table>
             </div>
 
-            {/* Mobile (kart) */}
+            {/* Mobile */}
             <div className="md:hidden space-y-3">
                 {paged.map(r=>(
                     <div key={r.id} className="rounded-2xl border bg-white p-4">
@@ -193,7 +244,7 @@ export default function HistoryPage(){
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-indigo-900/60">Toplam <b>{total}</b> kayıt • Sayfa {page}/{totalPages}</div>
                 <div className="flex items-center gap-2">
-                    <select className="rounded-xl border px-2 py-1" value={pageSize} onChange={e=>{ setPageSize(+e.target.value); setPage(1); }}>
+                    <select className="rounded-xl border px-2 py-1" value={pageSize} onChange={e=>{ setPageSize(+e.target.value); setPage(1); }} aria-label="Sayfa başına">
                         {[5,10,20,50].map(s=><option key={s} value={s}>{s}/sayfa</option>)}
                     </select>
                     <div className="flex items-center gap-1">
@@ -219,8 +270,7 @@ export default function HistoryPage(){
     );
 }
 
-/* -------- Modal -------- */
-
+/* ---------- Modal ---------- */
 function PassengerModal({
                             trip, passengers, page, perPage, total, onChangePage, onChangePerPage, onClose
                         }:{
@@ -238,7 +288,7 @@ function PassengerModal({
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
             <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border bg-white p-4">
                 <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-lg font-semibold">Yolcular • {trip.trip}</h2>
+                    <h2 className="text-lg font-semibold">Yolcular • {trip.trip || `${trip.terminal_from} → ${trip.terminal_to}`}</h2>
                     <button onClick={onClose} className="px-2 py-1 rounded-lg border">Kapat</button>
                 </div>
 
@@ -277,7 +327,7 @@ function PassengerModal({
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                     <div className="text-sm text-indigo-900/60">Toplam <b>{total}</b> kayıt • Sayfa {page}/{totalPages}</div>
                     <div className="flex items-center gap-2">
-                        <select className="rounded-xl border px-2 py-1" value={perPage} onChange={e=>onChangePerPage(+e.target.value)}>
+                        <select className="rounded-xl border px-2 py-1" value={perPage} onChange={e=>onChangePerPage(+e.target.value)} aria-label="Sayfa başına">
                             {[5,10,20,50].map(s=><option key={s} value={s}>{s}/sayfa</option>)}
                         </select>
                         <div className="flex items-center gap-1">
@@ -290,10 +340,3 @@ function PassengerModal({
         </div>
     );
 }
-
-/* -------- helpers -------- */
-const fmtTR = (iso?:string) =>
-    iso ? new Date(iso).toLocaleString('tr-TR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-
-const fmtTL = (n:any) =>
-    new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 }).format(Number(n||0));

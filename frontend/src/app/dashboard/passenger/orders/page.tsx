@@ -16,9 +16,10 @@ type PageLike<T> =
     | { data:T[]; total?:number; next_page_url?:string|null; prev_page_url?:string|null; meta?:any; links?:any }
     | { orders:T[]; total?:number; next_page_url?:string|null; prev_page_url?:string|null; meta?:any; links?:any }
     | T[];
+type ApiErr = { message?:string; errors?:Record<string, string[]|string> };
 
-/* ---- Helpers (dashboard ile aynı mantık) ---- */
-const TRYc = new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:2});
+/* ---- Helpers ---- */
+const TRYc = new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 });
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL||'').replace(/\/+$/,'');
 
 const toPath = (u?:string|null) => {
@@ -30,19 +31,14 @@ const toPath = (u?:string|null) => {
 
 function pickRows<T=any>(raw:any): { rows:T[]; total:number; next:string|null; prev:string|null }{
     if(!raw) return { rows:[], total:0, next:null, prev:null };
-    if(Array.isArray(raw)){
-        return { rows:raw, total:raw.length, next:null, prev:null };
-    }
-    const rows: T[] =
-        Array.isArray(raw.data)    ? raw.data :
-            Array.isArray(raw.orders)  ? raw.orders :
-                [];
-    const total =
-        Number(raw.total ?? raw?.meta?.total ?? rows.length);
+    if(Array.isArray(raw)) return { rows:raw, total:raw.length, next:null, prev:null };
+    const rows: T[] = Array.isArray(raw.data) ? raw.data : (Array.isArray(raw.orders) ? raw.orders : []);
+    const total = Number(raw.total ?? raw?.meta?.total ?? rows.length);
     const next  = raw.next_page_url ?? raw?.meta?.next_page_url ?? raw?.links?.next ?? null;
     const prev  = raw.prev_page_url ?? raw?.meta?.prev_page_url ?? raw?.links?.prev ?? null;
     return { rows, total, next, prev };
 }
+const clamp = (n:number,min:number,max:number)=> Math.max(min, Math.min(max, n));
 
 /* ---- Page ---- */
 export default function Page(){
@@ -53,17 +49,22 @@ export default function Page(){
     const [perPage,setPerPage] = useState(10);
     const [loading,setLoading] = useState(false);
     const [err,setErr] = useState('');
+    const [banner,setBanner] = useState('');
 
     const load = async (url?:string) => {
         if(!token) return;
-        setLoading(true); setErr('');
+        setLoading(true); setErr(''); setBanner('');
         try{
             const path = url ? (toPath(url) as string) : '/orders';
-            const res = await api.get(path, { token, params: url ? undefined : { per_page: perPage } });
+            const params = url ? undefined : { per_page: clamp(perPage,5,100) };
+            const res = await api.get(path, { token, params });
             const data = await api.json<PageLike<Order>>(res);
             setItems(data);
+            const { total } = pickRows<Order>(data);
+            setBanner(`Toplam ${total} kayıt yüklendi.`);
         } catch(e:any){
-            setErr(e?.message || 'Veri alınamadı');
+            const p:ApiErr|undefined = e?.response?.data;
+            setErr(p?.message || e?.message || 'Veri alınamadı');
         } finally{
             setLoading(false);
         }
@@ -80,29 +81,38 @@ export default function Page(){
     },[rows,q]);
 
     const cols = [
-        { key:'pnr', title:'PNR' },
-        { key:'trip', title:'Sefer', map:(o:Order)=>o.product?.trip ?? '' },
-        { key:'route', title:'Güzergah', map:(o:Order)=>`${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}` },
-        { key:'departure', title:'Kalkış', map:(o:Order)=>fmtTR(o.product?.departure_time) },
-        { key:'qty', title:'Adet' },
+        { key:'pnr',        title:'PNR' },
+        { key:'trip',       title:'Sefer',         map:(o:Order)=>o.product?.trip ?? '' },
+        { key:'route',      title:'Güzergah',      map:(o:Order)=>`${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}` },
+        { key:'departure',  title:'Kalkış',        map:(o:Order)=>fmtTR(o.product?.departure_time) },
+        { key:'qty',        title:'Adet' },
         { key:'unit_price', title:'Birim' },
-        { key:'total', title:'Toplam' },
-        { key:'created_at', title:'Sipariş Tarihi', map:(o:Order)=>fmtTR(o.created_at) },
-    ];
+        { key:'total',      title:'Toplam' },
+        { key:'created_at', title:'Sipariş Tarihi',map:(o:Order)=>fmtTR(o.created_at) },
+    ] as const;
 
     const exportAll = async () => {
         if(!token) return;
-        const out: Order[] = [];
-        let url: string | null = `/orders?per_page=100`;
-        for(let i=0;i<200;i++){
-            const res = await api.get(url, { token });
-            const data = await api.json<any>(res);
-            const { rows, next } = pickRows<Order>(data);
-            out.push(...rows);
-            url = toPath(next||'');
-            if(!url) break;
+        setLoading(true); setErr(''); setBanner('');
+        try{
+            const out: Order[] = [];
+            let url: string | null = `/orders?per_page=100`;
+            for(let i=0;i<200;i++){
+                const res = await api.get(url, { token });
+                const data = await api.json<any>(res);
+                const { rows, next } = pickRows<Order>(data);
+                out.push(...rows);
+                url = toPath(next||'');
+                if(!url) break;
+            }
+            exportCSV('siparislerim_tumu', out, cols as any);
+            setBanner(`Dışa aktarıldı: ${out.length} kayıt.`);
+        }catch(e:any){
+            const p:ApiErr|undefined = e?.response?.data;
+            setErr(p?.message || e?.message || 'Dışa aktarma hatası');
+        }finally{
+            setLoading(false);
         }
-        exportCSV('siparislerim_tumu', out, cols as any);
     };
 
     if(isLoading) return <div className="p-6">Yükleniyor…</div>;
@@ -110,6 +120,7 @@ export default function Page(){
 
     return (
         <div className="space-y-4 text-indigo-900">
+            {/* Üst bar */}
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-bold text-indigo-900">Siparişlerim</h1>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -118,23 +129,47 @@ export default function Page(){
                         placeholder="Ara (PNR, sefer...)"
                         value={q}
                         onChange={e=>setQ(e.target.value)}
+                        aria-label="Arama"
                     />
                     <div className="flex gap-2">
-                        <select className="rounded-lg border px-2" value={perPage} onChange={e=>setPerPage(Number(e.target.value))}>
+                        <select
+                            className="rounded-lg border px-2"
+                            value={perPage}
+                            onChange={e=>setPerPage(Number(e.target.value))}
+                            aria-label="Sayfa başına"
+                        >
                             {[5,10,20,50,100].map(n=><option key={n} value={n}>{n}/sayfa</option>)}
                         </select>
-                        <button className="px-3 py-2 rounded-lg border" onClick={exportAll}>CSV</button>
-                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('siparisler.json', filtered)}>JSON</button>
-                        <button className="px-3 py-2 rounded-lg border" onClick={()=>load()}>Yenile</button>
+                        <button
+                            className="px-3 py-2 rounded-lg border disabled:opacity-50"
+                            onClick={exportAll}
+                            disabled={loading}
+                        >CSV</button>
+                        <button
+                            className="px-3 py-2 rounded-lg border disabled:opacity-50"
+                            onClick={()=>exportJSON('siparislerim.json', filtered)}
+                            disabled={!filtered.length}
+                        >JSON</button>
+                        <button
+                            className="px-3 py-2 rounded-lg border disabled:opacity-50"
+                            onClick={()=>load()}
+                            disabled={loading}
+                        >Yenile</button>
                     </div>
                 </div>
             </div>
 
+            {/* Bannerlar */}
+            {banner && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{banner}</div>}
+            {err &&    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
+
+            {/* Tablo */}
             <div className="rounded-2xl border bg-white p-4 overflow-x-auto">
                 <table className="min-w-[900px] w-full text-sm">
                     <thead>
                     <tr className="text-left text-indigo-900/60">
-                        <th className="py-2">PNR</th><th>Sefer</th><th>Güzergah</th><th>Kalkış</th><th>Adet</th><th>Birim</th><th>Toplam</th><th>Tarih</th>
+                        <th className="py-2">PNR</th><th>Sefer</th><th>Güzergah</th><th>Kalkış</th>
+                        <th>Adet</th><th>Birim</th><th>Toplam</th><th>Tarih</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -156,6 +191,7 @@ export default function Page(){
                     </tbody>
                 </table>
 
+                {/* Pager */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between mt-3">
                     <div className="text-sm text-indigo-900/60">Toplam {total} kayıt</div>
                     <div className="flex gap-2">
@@ -163,16 +199,16 @@ export default function Page(){
                             disabled={!prev || loading}
                             onClick={()=> prev && load(prev)}
                             className="px-3 py-1 rounded-lg border disabled:opacity-50"
+                            aria-label="Geri"
                         >Geri</button>
                         <button
                             disabled={!next || loading}
                             onClick={()=> next && load(next)}
                             className="px-3 py-1 rounded-lg border disabled:opacity-50"
+                            aria-label="İleri"
                         >İleri</button>
                     </div>
                 </div>
-
-                {!!err && <div className="mt-3 text-sm text-red-600">{err}</div>}
             </div>
         </div>
     );

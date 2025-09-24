@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
 import { myAppHook } from '../../../../../context/AppProvider';
 import { exportCSV } from '@/app/lib/export';
@@ -13,27 +14,38 @@ type Trip = {
     terminal_from:string;
     terminal_to:string;
     departure_time:string;
-    cost:number;
-    capacity_reservation:number;
+    cost:number|string;
+    capacity_reservation:number|string;
     is_active:number|boolean;
     note?:string;
     duration?:string;
-    bus_type?:string;
+    bus_type?:'2+1'|'2+2'|string;
     route?: { name:string; time?:string }[];
     important_notes?: string|null;
     cancellation_policy?: string|null;
+    created_at?:string;
 };
 type Company = { id:number; name:string; code:string };
 type Terminal = { id:number; name:string; city:string; code:string };
+type ApiErr = { message?:string; errors?:Record<string, string[]|string> };
+
+/* ---------------- Helpers ---------------- */
+const toNum = (v:any)=> Number((typeof v==='string' ? v.replace(',','.') : v) || 0);
+const clamp = (n:number, min:number, max:number)=> Math.max(min, Math.min(max, n));
+const fmtTR = (iso?:string) =>
+    iso ? new Date(iso).toLocaleString('tr-TR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+const fmtTL = (n:any) =>
+    new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 }).format(Number(n||0));
 
 /* ---------------- Page ---------------- */
 export default function Trips(){
-    const { token, isLoading } = myAppHook() as any;
+    const { token, isLoading } = (myAppHook() as any) || {};
     const [rows,setRows]=useState<Trip[]>([]);
     const [q,setQ]=useState('');
     const [open,setOpen]=useState(false);
     const [edit,setEdit]=useState<Trip|null>(null);
-    const [myCompany, setMyCompany] = useState<{id:number; name:string; code:string}|null>(null);
+    const [myCompany, setMyCompany] = useState<Company|null>(null);
+    const [err,setErr] = useState('');
 
     // pagination
     const [page, setPage] = useState(1);
@@ -43,21 +55,30 @@ export default function Trips(){
     const [now, setNow] = useState<number>(Date.now());
     useEffect(()=>{ const t=setInterval(()=>setNow(Date.now()), 30000); return ()=>clearInterval(t); },[]);
 
-    const load = () => axios.get('/products').then(r => setRows(r.data.products || []));
+    const load = useCallback(async ()=>{
+        if(!token) return;
+        setErr('');
+        try{
+            const { data } = await axios.get('/products', { headers:{ Accept:'application/json' } });
+            const arr:Trip[] = Array.isArray(data?.products) ? data.products : (data?.data||[]);
+            setRows(Array.isArray(arr) ? arr : []);
+        }catch(e:any){
+            const p:ApiErr|undefined = e?.response?.data;
+            setErr(p?.message || 'Seferler alınamadı.');
+            setRows([]);
+        }
+    },[token]);
 
     useEffect(()=>{
         if (isLoading || !token) return;
         (async ()=>{
-            const { data: comp } = await axios.get('/personnel/company');
-            setMyCompany(comp || null);
+            try{
+                const { data } = await axios.get('/personnel/company', { headers:{ Accept:'application/json' } });
+                setMyCompany(data || null);
+            }catch{ setMyCompany(null); }
             await load();
-        })().catch(()=>{});
-    },[isLoading, token]);
-
-    useEffect(()=>{
-        if (isLoading || !token) return;
-        load();
-    },[isLoading, token]);
+        })();
+    },[isLoading, token, load]);
 
     // dakika hesap
     const minutesLeft = (dt:string)=>{
@@ -68,9 +89,8 @@ export default function Trips(){
     // otomatik kapatma (<=60dk ve is_active=true)
     const closedOnce = useRef<Set<number>>(new Set());
     useEffect(()=>{
-        if (isLoading || !token) return;
+        if (isLoading || !token || !rows.length) return;
         const targets = rows.filter(r => (r.is_active===1 || r.is_active===true) && minutesLeft(r.departure_time) <= 60);
-        if (!targets.length) return;
         const toCall = targets.filter(t => !closedOnce.current.has(t.id));
         if (!toCall.length) return;
         (async ()=>{
@@ -78,21 +98,19 @@ export default function Trips(){
                 await Promise.all(
                     toCall.map(t=>{
                         closedOnce.current.add(t.id);
-                        return axios.put(`/products/${t.id}`, { is_active:false }).catch(()=>{});
+                        return axios.put(`/products/${t.id}`, { is_active:false }, { headers:{ Accept:'application/json' } }).catch(()=>{});
                     })
                 );
-                load(); // durum yenile
-            }catch{}
+                await load();
+            }catch{/* yut */}
         })();
-    },[rows, now, isLoading, token]);
+    },[rows, now, isLoading, token, load]);
 
     // filtre + şirket kısıtı
     const filtered = useMemo(()=>{
         const ql = q.trim().toLowerCase();
         let base = rows;
-        if (myCompany) {
-            base = base.filter(r => r.company_name === myCompany.name || r.company_id === myCompany.id);
-        }
+        if (myCompany) base = base.filter(r => r.company_name === myCompany.name || r.company_id === myCompany.id);
         return ql ? base.filter(r => JSON.stringify(r).toLowerCase().includes(ql)) : base;
     },[rows,q,myCompany]);
 
@@ -103,7 +121,7 @@ export default function Trips(){
     }),[filtered, now]);
 
     const total = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const totalPages = Math.max(1, Math.ceil(total / clamp(pageSize,5,100)));
     useEffect(()=>{ if(page > totalPages) setPage(totalPages); },[totalPages, page]);
     const paged = useMemo(()=>{
         const start = (page-1)*pageSize;
@@ -116,8 +134,13 @@ export default function Trips(){
         return null;
     };
 
+    if (isLoading) return <div className="p-6">Yükleniyor…</div>;
+    if (!token)    return <div className="p-6">Giriş yapın.</div>;
+
     return (
         <div className="space-y-4 text-indigo-900/80">
+            {err && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 whitespace-pre-line">{err}</div>}
+
             {/* Uyarı kutusu */}
             {closingSoon.length>0 && (
                 <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3">
@@ -140,6 +163,7 @@ export default function Trips(){
                         placeholder="Ara (sefer, firma, güzergâh)…"
                         value={q}
                         onChange={e=>{ setQ(e.target.value); setPage(1); }}
+                        aria-label="Sefer ara"
                     />
                     <button
                         onClick={()=>{setEdit(null);setOpen(true);}}
@@ -156,8 +180,8 @@ export default function Trips(){
                                 { key:'terminal_from', title:'Kalkış' },
                                 { key:'terminal_to', title:'Varış' },
                                 { key:'departure_time', title:'Kalkış Zamanı' },
-                                { key:'cost', title:'Ücret' },
-                                { key:'capacity_reservation', title:'Kapasite' },
+                                { key:'cost', title:'Ücret', map:(r:Trip)=> toNum(r.cost) },
+                                { key:'capacity_reservation', title:'Kapasite', map:(r:Trip)=> toNum(r.capacity_reservation) },
                                 { key:'duration', title:'Süre' },
                                 { key:'bus_type', title:'Otobüs Tipi' },
                                 { key:'route', title:'Durak Sayısı', map:(r:Trip)=>r.route?.length ?? 0 },
@@ -165,6 +189,7 @@ export default function Trips(){
                             ]);
                         }}
                         className="rounded-xl border px-4 py-2"
+                        aria-label="CSV dışa aktar"
                     >
                         CSV
                     </button>
@@ -192,8 +217,7 @@ export default function Trips(){
                     <tbody>
                     {paged.map(r=>{
                         const m = minutesLeft(r.departure_time);
-                        const autoClosed = (m<=60) || m<=0;
-                        const rowDim = autoClosed ? 'opacity-70' : '';
+                        const rowDim = (m<=60) ? 'opacity-70' : '';
                         return (
                             <tr key={r.id} className={`border-t ${rowDim}`}>
                                 <td className="py-2 font-medium">
@@ -235,7 +259,7 @@ export default function Trips(){
             <div className="md:hidden space-y-3">
                 {paged.map(r=>{
                     const m = minutesLeft(r.departure_time);
-                    const rowDim = (m<=60 || m<=0) ? 'opacity-75' : '';
+                    const rowDim = (m<=60) ? 'opacity-75' : '';
                     return (
                         <div key={r.id} className={`rounded-2xl border bg-white p-4 ${rowDim}`}>
                             <div className="flex items-center justify-between gap-3">
@@ -263,7 +287,14 @@ export default function Trips(){
                                 <button className="px-3 py-1 rounded-lg border"
                                         onClick={async()=>{
                                             if(!token || isLoading) return alert('Giriş yapın');
-                                            if(confirm('Silinsin mi?')){ await axios.delete(`/products/${r.id}`); load(); }
+                                            if(confirm('Silinsin mi?')){
+                                                try{
+                                                    await axios.delete(`/products/${r.id}`, { headers:{ Accept:'application/json' } });
+                                                    await load();
+                                                }catch(e:any){
+                                                    alert(e?.response?.data?.message || 'Silme hatası');
+                                                }
+                                            }
                                         }}>Sil</button>
                             </div>
                         </div>
@@ -285,34 +316,42 @@ export default function Trips(){
                     <select
                         className="rounded-xl border px-2 py-1"
                         value={pageSize}
-                        onChange={e=>{ setPageSize(Number(e.target.value)); setPage(1); }}
+                        onChange={e=>{ setPageSize(clamp(Number(e.target.value),5,100)); setPage(1); }}
+                        aria-label="Sayfa başına"
                     >
                         {[5,10,20,50].map(s=><option key={s} value={s}>{s}/sayfa</option>)}
                     </select>
                     <div className="flex items-center gap-1">
                         <button className="px-3 py-1 rounded-lg border disabled:opacity-50"
                                 disabled={page<=1}
-                                onClick={()=>setPage(p=>Math.max(1,p-1))}>Önceki</button>
+                                onClick={()=>setPage(p=>Math.max(1,p-1))}
+                                aria-label="Önceki">Önceki</button>
                         <button className="px-3 py-1 rounded-lg border disabled:opacity-50"
                                 disabled={page>=totalPages}
-                                onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Sonraki</button>
+                                onClick={()=>setPage(p=>Math.min(totalPages,p+1))}
+                                aria-label="Sonraki">Sonraki</button>
                     </div>
                 </div>
             </div>
 
-            {open && <TripModal onClose={()=>setOpen(false)} onSaved={()=>{setOpen(false);load();}} initial={edit}/>}
+            {open && (
+                <TripModal
+                    initial={edit}
+                    onClose={()=>setOpen(false)}
+                    onSaved={async()=>{ setOpen(false); setEdit(null); await load(); }}
+                />
+            )}
         </div>
     );
 }
 
 /* ---------------- Modal ---------------- */
 function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void; initial:Trip|null}){
-    const { token, isLoading } = myAppHook() as any;
+    const { token, isLoading } = (myAppHook() as any) || {};
 
-    const [companies,setCompanies]=useState<Company[]>([]);
     const [terminals,setTerminals]=useState<Terminal[]>([]);
     const [loadingLookups,setLoadingLookups]=useState(true);
-    const [myCompany,setMyCompany]=useState<Company|null>(null);
+    const [err,setErr]=useState('');
 
     const [form,setForm]=useState<Partial<Trip>>(initial ?? {
         is_active:1, capacity_reservation:0, route:[], bus_type:'2+1'
@@ -322,35 +361,27 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         let mounted=true;
         (async()=>{
             try{
-                const [tRes, cRes] = await Promise.all([
-                    axios.get('/public/terminals', { withCredentials:false }),
-                    axios.get('/personnel/company'),
-                ]);
+                const tRes = await axios.get('/public/terminals', { withCredentials:false, headers:{ Accept:'application/json' } });
                 const term = Array.isArray(tRes.data) ? tRes.data as Terminal[] : (tRes.data?.terminals || []);
                 if(!mounted) return;
                 setTerminals(term);
-                setMyCompany(cRes.data || null);
-
                 if(!initial){
                     const from = term[0]?.name || '';
-                    const to   = term.find(x=>x.name!==from)?.name || '';
+                    const to   = term.find((x: { name: any; })=>x.name!==from)?.name || '';
                     setForm(s=>({
                         ...s,
                         terminal_from: s.terminal_from || from,
-                        terminal_to:   s.terminal_to   || to,
-                        company_name:  cRes.data?.name || s.company_name || '',
+                        terminal_to:   s.terminal_to   || to
                     }));
-                } else {
-                    setForm(s=>({ ...s, company_name: cRes.data?.name || s.company_name }));
                 }
             } finally { if(mounted) setLoadingLookups(false); }
         })();
         return ()=>{ mounted=false; };
     },[initial]);
 
-    const change=(k:string,v:any)=>{
+    const change=(k:keyof Trip, v:any)=>{
         setForm(s=>{
-            const next = { ...s, [k]:v };
+            const next:any = { ...s, [k]:v };
             if((!next.trip || String(next.trip).trim()==='') && next.terminal_from && next.terminal_to){
                 next.trip = `${next.terminal_from} - ${next.terminal_to}`;
             }
@@ -366,38 +397,61 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         const r=[...(s.route||[])]; r.splice(i,1); return {...s, route:r};
     });
 
-    const swapFromTo=()=> setForm(s=>({
-        ...s,
-        terminal_from: s.terminal_to,
-        terminal_to: s.terminal_from,
-        trip: (s.terminal_to && s.terminal_from) ? `${s.terminal_to} - ${s.terminal_from}` : s.trip
-    }));
+    const swapFromTo=()=> setForm(s=>{
+        const from = s.terminal_from; const to = s.terminal_to;
+        const trip = (to && from) ? `${to} - ${from}` : s.trip;
+        return { ...s, terminal_from: to, terminal_to: from, trip };
+    });
+
+    const validate = ()=>{
+        const errors:string[] = [];
+        const from = String(form.terminal_from||'').trim();
+        const to   = String(form.terminal_to||'').trim();
+        const dep  = String(form.departure_time||'').trim();
+        if(!from) errors.push('Kalkış zorunlu.');
+        if(!to) errors.push('Varış zorunlu.');
+        if(from && to && from===to) errors.push('Kalkış ve varış aynı olamaz.');
+        if(!dep) errors.push('Kalkış zamanı zorunlu.');
+        const mLeft = dep ? Math.floor((new Date(dep.includes('T')?dep:dep.replace(' ','T')).getTime()-Date.now())/60000) : 0;
+        if(dep && mLeft < 0) errors.push('Kalkış geçmişte olamaz.');
+        const cost = toNum(form.cost);
+        if(!(cost>=0)) errors.push('Ücret 0 veya daha büyük olmalı.');
+        const cap = Math.trunc(toNum(form.capacity_reservation));
+        if(!(cap>=0)) errors.push('Kapasite 0 veya daha büyük olmalı.');
+        return { ok: errors.length===0, msg: errors.join('\n') };
+    };
 
     const save=async()=>{
         if (isLoading || !token) { alert('Önce giriş yapın'); return; }
-        if (!form.company_name || !form.terminal_from || !form.terminal_to || !form.departure_time) {
-            alert('Firma, kalkış, varış ve kalkış zamanı zorunlu');
-            return;
-        }
+        const v = validate();
+        if(!v.ok){ alert(v.msg); return; }
+
         const payload = {
-            trip: form.trip || `${form.terminal_from} - ${form.terminal_to}`,
-            company_name: form.company_name,
+            trip: (form.trip || `${form.terminal_from} - ${form.terminal_to}`),
+            company_name: form.company_name || undefined,
             terminal_from: form.terminal_from,
             terminal_to: form.terminal_to,
             departure_time: form.departure_time,
-            cost: Number(form.cost||0),
-            capacity_reservation: Number(form.capacity_reservation||0),
+            cost: toNum(form.cost),
+            capacity_reservation: Math.trunc(toNum(form.capacity_reservation)),
             is_active: !!form.is_active,
-            note: form.note||null,
+            note: form.note || null,
             duration: form.duration || null,
             bus_type: form.bus_type || null,
-            route: (form.route||[]).filter(s=>s.name?.trim()),
+            route: (form.route||[]).filter(s=>String(s.name||'').trim()),
             cancellation_policy: form.cancellation_policy || null,
             important_notes: form.important_notes || null,
         };
-        if(initial) await axios.put(`/products/${initial.id}`, payload);
-        else await axios.post('/products', payload);
-        onSaved();
+
+        try{
+            setErr('');
+            if(initial) await axios.put(`/products/${initial.id}`, payload, { headers:{ Accept:'application/json' } });
+            else        await axios.post('/products', payload, { headers:{ Accept:'application/json' } });
+            onSaved();
+        }catch(e:any){
+            const p:ApiErr|undefined = e?.response?.data;
+            setErr(p?.message || (p?.errors && Object.values(p.errors).flat().join('\n')) || 'Kayıt hatası.');
+        }
     };
 
     if(loadingLookups){
@@ -416,41 +470,34 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
                     <button onClick={onClose} className="px-2 py-1 rounded-lg border">Kapat</button>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-3">
-                    {/* Firma */}
-                    <div>
-                        <label className="block text-sm font-medium text-indigo-900 mb-1">Firma</label>
-                        <input className="w-full rounded-xl border px-3 py-2 bg-gray-100"
-                               value={myCompany?.name || form.company_name || ''} disabled readOnly />
-                    </div>
+                {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 whitespace-pre-line">{err}</div>}
 
-                    {/* Sefer adı */}
+                <div className="grid md:grid-cols-2 gap-3">
                     <Input label="Sefer Adı" value={String(form.trip||'')} onChange={v=>change('trip',v)} />
 
-                    {/* Kalkış / Varış */}
-                    <TerminalSelect label="Kalkış Terminal" value={String(form.terminal_from||'')}
-                                    onChange={v=>change('terminal_from', v)} />
+                    <div>
+                        <label className="block text-sm font-medium text-indigo-900 mb-1">Kalkış Terminal</label>
+                        <TerminalSelect terminals={terminals} value={String(form.terminal_from||'')} onChange={v=>change('terminal_from', v)} />
+                    </div>
+
                     <div>
                         <div className="flex items-center justify-between">
                             <label className="block text-sm font-medium text-indigo-900 mb-1">Varış Terminal</label>
                             <button type="button" className="text-xs underline" onClick={swapFromTo}>Kalkış ↔ Varış</button>
                         </div>
-                        <TerminalSelect value={String(form.terminal_to||'')} onChange={v=>change('terminal_to', v)} />
+                        <TerminalSelect terminals={terminals} value={String(form.terminal_to||'')} onChange={v=>change('terminal_to', v)} />
                     </div>
 
-                    {/* Zaman / Ücret */}
                     <Input label="Kalkış Zamanı" type="datetime-local" value={String(form.departure_time||'')} onChange={v=>change('departure_time',v)}/>
                     <Input label="Ücret (₺)" type="number" value={String(form.cost??'')} onChange={v=>change('cost',v)}/>
 
-                    {/* Kapasite / Süre */}
                     <Input label="Kapasite" type="number" value={String(form.capacity_reservation??'')} onChange={v=>change('capacity_reservation',v)}/>
                     <Input label="Süre (örn: 6s 15dk)" value={String(form.duration||'')} onChange={v=>change('duration',v)} />
 
-                    {/* Otobüs düzeni / Aktif */}
                     <div>
                         <label className="block text-sm font-medium text-indigo-900 mb-1">Otobüs Düzeni</label>
                         <select className="w-full rounded-xl border px-3 py-2"
-                                value={String(form.bus_type||'')}
+                                value={String(form.bus_type||'2+1')}
                                 onChange={e=>change('bus_type', e.target.value)}>
                             <option value="2+1">2+1</option>
                             <option value="2+2">2+2</option>
@@ -468,7 +515,6 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
                         </select>
                     </div>
 
-                    {/* Notlar */}
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-indigo-900 mb-1">Önemli Notlar</label>
                         <textarea className="w-full rounded-xl border px-3 py-2" rows={2}
@@ -482,9 +528,8 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
                                   onChange={e=>change('cancellation_policy', e.target.value)} />
                     </div>
 
-                    {/* Duraklar */}
-                    <RouteStops form={form} setStop={setStop} addStop={addStop} delStop={delStop} />
-                    {/* Not */}
+                    <RouteStops form={form} setStop={setStop} addStop={addStop} delStop={delStop} terminals={terminals} />
+
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-indigo-900 mb-1">Not</label>
                         <textarea className="w-full rounded-xl border px-3 py-2" rows={2}
@@ -502,39 +547,27 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
     );
 }
 
-function TerminalSelect({label, value, onChange}:{label?:string; value:string; onChange:(v:string)=>void}){
-    const [terminals,setTerminals]=useState<Terminal[]>([]);
-    useEffect(()=>{
-        let m=true;
-        axios.get('/public/terminals', { withCredentials:false }).then(r=>{
-            const t = Array.isArray(r.data) ? r.data as Terminal[] : (r.data?.terminals||[]);
-            if(m) setTerminals(t);
-        }).catch(()=>{});
-        return ()=>{ m=false; };
-    },[]);
+/* ---------------- UI bits ---------------- */
+function TerminalSelect({terminals, value, onChange}:{terminals:Terminal[]; value:string; onChange:(v:string)=>void}){
     return (
-        <div>
-            {label && <label className="block text-sm font-medium text-indigo-900 mb-1">{label}</label>}
-            <select className="w-full rounded-xl border px-3 py-2"
-                    value={value}
-                    onChange={e=>onChange(e.target.value)}>
-                <option value="">Seçin</option>
-                {terminals.map(t=> <option key={t.id} value={t.name}>{t.city} — {t.name}</option>)}
-            </select>
-        </div>
+        <select className="w-full rounded-xl border px-3 py-2"
+                value={value}
+                onChange={e=>onChange(e.target.value)}>
+            <option value="">Seçin</option>
+            {terminals.map(t=> <option key={t.id} value={t.name}>{t.city} — {t.name}</option>)}
+        </select>
     );
 }
 
-function RouteStops({form,setStop,addStop,delStop}:{form:Partial<Trip>;setStop:(i:number,k:'name'|'time',v:string)=>void;addStop:()=>void;delStop:(i:number)=>void}){
-    const [terminals,setTerminals]=useState<Terminal[]>([]);
-    useEffect(()=>{
-        let m=true;
-        axios.get('/public/terminals', { withCredentials:false }).then(r=>{
-            const t = Array.isArray(r.data) ? r.data as Terminal[] : (r.data?.terminals||[]);
-            if(m) setTerminals(t);
-        }).catch(()=>{});
-        return ()=>{ m=false; };
-    },[]);
+function RouteStops({
+                        form,setStop,addStop,delStop,terminals
+                    }:{
+    form:Partial<Trip>;
+    setStop:(i:number,k:'name'|'time',v:string)=>void;
+    addStop:()=>void;
+    delStop:(i:number)=>void;
+    terminals:Terminal[];
+}){
     return (
         <div className="md:col-span-2">
             <div className="flex items-center justify-between mb-1">
@@ -567,7 +600,6 @@ function RouteStops({form,setStop,addStop,delStop}:{form:Partial<Trip>;setStop:(
     );
 }
 
-/* ---------------- UI bits ---------------- */
 function Input({label,value,onChange,type='text'}:{label:string;value:string;onChange:(v:string)=>void;type?:string}){
     return (
         <div>
@@ -577,9 +609,3 @@ function Input({label,value,onChange,type='text'}:{label:string;value:string;onC
         </div>
     );
 }
-
-const fmtTR = (iso?:string) =>
-    iso ? new Date(iso).toLocaleString('tr-TR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-
-const fmtTL = (n:any) =>
-    new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 }).format(Number(n||0));
