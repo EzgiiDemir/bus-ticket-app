@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\RoleRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Auth\Events\PasswordReset;
@@ -20,7 +21,6 @@ class AuthController extends Controller
             'email'       => 'required|email|unique:users,email',
             'password'    => 'required|confirmed|min:6',
             'role'        => 'required|in:passenger,personnel,admin',
-            // personel ise company_id zorunlu
             'company_id'  => 'required_if:role,personnel|nullable|exists:companies,id',
         ]);
 
@@ -35,16 +35,27 @@ class AuthController extends Controller
             'role_status' => $isPersonnel ? 'pending' : 'active',
         ]);
 
+// use App\Models\RoleRequest;
         if ($isPersonnel) {
-            \App\Models\RoleRequest::create([
-                'user_id' => $user->id,
-                'type'    => 'personnel_request',
-                'status'  => 'pending',
-                'note'    => 'Initial personnel signup',
-            ]);
+            RoleRequest::updateOrCreate(
+                ['user_id'=>$user->id, 'role'=>'personnel'],
+                [
+                    'company_id'     => $user->company_id,
+                    'company_status' => 'pending',
+                    'admin_status'   => 'pending',
+                    // legacy alanlar tabloya varsa:
+                    'type'           => 'personnel_request',
+                    'status'         => 'pending',
+                    'note'           => 'Initial personnel signup',
+                ]
+            );
+            $user->update(['role_status'=>'pending']);
         }
 
-        return response()->json(['message' => 'ok', 'user' => $user], 201);
+        return response()->json([
+            'message' => 'ok',
+            'user'    => $user->load('Company:id,name,code'),
+        ], 201);
     }
 
     public function login(Request $request)
@@ -62,12 +73,9 @@ class AuthController extends Controller
         $user = Auth::user();
 
         if ($user->role === 'personnel' && $user->role_status !== 'active') {
-            Auth::logout();
             return response()->json([
                 'status'=>false,
-                'message'=> $user->role_status === 'pending'
-                    ? 'Personel başvurunuz onay bekliyor'
-                    : 'Personel başvurunuz reddedildi'
+                'message'=>'Hesabınız onay bekliyor. Önce firma ardından admin onayı gerekir.'
             ], 403);
         }
 
@@ -81,14 +89,14 @@ class AuthController extends Controller
                 'email'        => $user->email,
                 'role'         => strtolower($user->role),
                 'role_status'  => $user->role_status,
-                'company'      => optional($user->company)->only(['id','name','code']),
+                'Company'      => optional($user->company)->only(['id','name','code']),
             ],
         ]);
     }
 
     public function profile(Request $request)
     {
-        $u = $request->user()->load('company:id,name,code');
+        $u = $request->user()->load('Company:id,name,code');
         return response()->json($u);
     }
 

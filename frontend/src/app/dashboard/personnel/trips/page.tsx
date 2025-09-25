@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
 import { myAppHook } from '../../../../../context/AppProvider';
-import { exportCSV } from '@/app/lib/export';
 
 /* ---------------- Types ---------------- */
 type Trip = {
@@ -171,28 +170,6 @@ export default function Trips(){
                     >
                         Yeni Sefer
                     </button>
-                    <button
-                        onClick={()=>{
-                            exportCSV('seferler', filtered, [
-                                { key:'id', title:'ID' },
-                                { key:'trip', title:'Sefer' },
-                                { key:'company_name', title:'Firma' },
-                                { key:'terminal_from', title:'Kalkış' },
-                                { key:'terminal_to', title:'Varış' },
-                                { key:'departure_time', title:'Kalkış Zamanı' },
-                                { key:'cost', title:'Ücret', map:(r:Trip)=> toNum(r.cost) },
-                                { key:'capacity_reservation', title:'Kapasite', map:(r:Trip)=> toNum(r.capacity_reservation) },
-                                { key:'duration', title:'Süre' },
-                                { key:'bus_type', title:'Otobüs Tipi' },
-                                { key:'route', title:'Durak Sayısı', map:(r:Trip)=>r.route?.length ?? 0 },
-                                { key:'is_active', title:'Aktif', map:(r:Trip)=> r.is_active ? 'Evet':'Hayır' },
-                            ]);
-                        }}
-                        className="rounded-xl border px-4 py-2"
-                        aria-label="CSV dışa aktar"
-                    >
-                        CSV
-                    </button>
                 </div>
             </div>
 
@@ -307,8 +284,7 @@ export default function Trips(){
                 )}
             </div>
 
-            {/* Pagination */
-            }
+            {/* Pagination */}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-indigo-900/60">
                     Toplam <b>{total}</b> kayıt • Sayfa {page}/{totalPages}
@@ -342,6 +318,9 @@ export default function Trips(){
                     onSaved={async()=>{ setOpen(false); setEdit(null); await load(); }}
                 />
             )}
+
+            {/* HATA DÜZELTİLDİ: initial değil, edit kullanılmalı */}
+            {edit && <SeatOverridesPanel productId={edit.id} />}
         </div>
     );
 }
@@ -471,7 +450,7 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         };
 
         const routePayload = buildRoutePayload(form.route);
-        if (routePayload) base.route = routePayload; // boşsa hiç ekleme
+        if (routePayload) base.route = routePayload;
 
         try{
             setErr('');
@@ -627,6 +606,92 @@ function RouteStops({
                 İpucu: Kalkış/varış terminallerini duraklara tekrar ekleme. Orta durakları seç.
             </div>
         </div>
+    );
+}
+
+function SeatOverridesPanel({productId}:{productId:number}) {
+    const [items,setItems] = useState<{id:number;seat_code:string;type:'fault'|'blocked';label:string;reason?:string|null}[]>([]);
+    const [form,setForm] = useState<{seat_code:string;type:'fault'|'blocked';label:string;reason:string}>({
+        seat_code:'', type:'fault', label:'Arıza', reason:''
+    });
+    const [err,setErr] = useState('');
+
+    const load = useCallback(async ()=>{
+        try{
+            const { data } = await axios.get(`/personnel/products/${productId}/seat-overrides`, { headers:{ Accept:'application/json' } });
+            setItems(Array.isArray(data)? data: []);
+        } catch(e:any){ setItems([]); }
+    },[productId]);
+
+    useEffect(()=>{ load(); },[load]);
+
+    const save = async ()=>{
+        setErr('');
+        const sc = form.seat_code.trim().toUpperCase();
+        if(!/^\d{1,2}[A-D]$/.test(sc)) { setErr('Koltuk kodu örn: 1A, 10C'); return; }
+        try{
+            await axios.post(`/personnel/products/${productId}/seat-overrides`, form, { headers:{ Accept:'application/json' } });
+            setForm({seat_code:'',type:'fault',label: form.type==='fault'?'Arıza':'Kapalı',reason:''});
+            await load();
+        }catch(e:any){
+            setErr(e?.response?.data?.message || 'Kayıt hatası');
+        }
+    };
+
+    const delItem = async (id:number)=>{
+        if(!confirm('Kaldırılsın mı?')) return;
+        try{
+            await axios.delete(`/personnel/products/${productId}/seat-overrides/${id}`, { headers:{ Accept:'application/json' } });
+            await load();
+        }catch(e:any){}
+    };
+
+    return (
+        <section className="md:col-span-2 rounded-xl border p-3">
+            <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold">Koltuk Durumları</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-[120px_140px_1fr_auto] gap-2">
+                <input className="rounded-xl border px-3 py-2" placeholder="Koltuk (örn 1A)" value={form.seat_code}
+                       onChange={e=>setForm(s=>({...s, seat_code:e.target.value}))}/>
+                <select className="rounded-xl border px-3 py-2" value={form.type}
+                        onChange={e=>{
+                            const t = e.target.value as 'fault'|'blocked';
+                            setForm(s=>({...s, type:t, label: t==='fault'?'Arıza':'Kapalı'}));
+                        }}>
+                    <option value="fault">Arıza</option>
+                    <option value="blocked">Kapalı</option>
+                </select>
+                <input className="rounded-xl border px-3 py-2" placeholder="Etiket (opsiyonel)" value={form.label}
+                       onChange={e=>setForm(s=>({...s, label:e.target.value}))}/>
+                <button className="rounded-xl border px-3 py-2" onClick={save}>Ekle/Güncelle</button>
+            </div>
+            <input className="mt-2 w-full rounded-xl border px-3 py-2" placeholder="Açıklama (opsiyonel)"
+                   value={form.reason} onChange={e=>setForm(s=>({...s, reason:e.target.value}))}/>
+
+            {err && <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">{err}</div>}
+
+            <div className="mt-3 overflow-auto">
+                <table className="w-full text-sm">
+                    <thead><tr className="text-left text-indigo-900/60"><th>Koltuk</th><th>Tür</th><th>Etiket</th><th>Açıklama</th><th></th></tr></thead>
+                    <tbody>
+                    {items.map(it=>(
+                        <tr key={it.id} className="border-t">
+                            <td className="py-1 font-medium">{it.seat_code}</td>
+                            <td>{it.type==='fault'?'Arıza':'Kapalı'}</td>
+                            <td>{it.label}</td>
+                            <td className="truncate max-w-[360px]">{it.reason||'-'}</td>
+                            <td className="text-right">
+                                <button className="px-2 py-1 rounded-lg border" onClick={()=>delItem(it.id)}>Sil</button>
+                            </td>
+                        </tr>
+                    ))}
+                    {items.length===0 && <tr><td colSpan={5} className="py-3 text-indigo-900/60">Kayıt yok</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+        </section>
     );
 }
 

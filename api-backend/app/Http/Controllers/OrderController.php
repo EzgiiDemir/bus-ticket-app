@@ -16,7 +16,7 @@ class OrderController extends Controller
     {
         $u = $r->user();
 
-        $q = \App\Models\Order::query()
+        $q = Order::query()
             ->with(['product:id,trip,terminal_from,terminal_to,departure_time,cost'])
             ->where('user_id', $u->id)
             ->latest();
@@ -24,57 +24,81 @@ class OrderController extends Controller
         $perPage = (int) $r->integer('per_page', 10);
         return response()->json($q->paginate($perPage));
     }
+
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'product_id'            => ['required','exists:products,id'],
-            'qty'                   => ['required','integer','min:1','max:10'],
-            'seats'                 => ['required','array','min:1','max:10'],
-            'seats.*'               => ['string'],
-            'reservation_id'        => ['nullable','uuid'],
+        // Frontend payload uyumu
+        // {
+        //   product_id, qty, seats:[...],
+        //   passengers:[{seat,first_name,last_name,doc_type,national_id?,passport_no?,nationality?,email?,phone?},...],
+        //   card_holder, card_number, card_exp, card_cvv, reservation_id?
+        // }
 
-            'unit_price'            => ['nullable','numeric'],
+        $v = $request->validate([
+            'product_id'   => ['required','exists:products,id'],
+            'qty'          => ['required','integer','min:1','max:10'],
+            'seats'        => ['required','array','min:1','max:10'],
+            'seats.*'      => ['string'],
 
-            'passenger_name'        => ['required','string','max:255'],
-            'passenger_doc_type'    => ['nullable','in:tc,passport'],
-            'passenger_national_id' => ['nullable','string','max:32'],
-            'passenger_passport_no' => ['nullable','string','max:64'],
-            'passenger_nationality' => ['nullable','string','max:5'],
+            'passengers'                      => ['required','array','min:1','max:10'],
+            'passengers.*.seat'               => ['required','string','max:8'],
+            'passengers.*.first_name'         => ['required','string','max:120'],
+            'passengers.*.last_name'          => ['required','string','max:120'],
+            'passengers.*.doc_type'           => ['required','in:tc,passport'],
+            'passengers.*.national_id'        => ['nullable','string','max:32','required_if:passengers.*.doc_type,tc'],
+            'passengers.*.passport_no'        => ['nullable','string','max:64','required_if:passengers.*.doc_type,passport'],
+            'passengers.*.nationality'        => ['nullable','string','max:5'],
+            'passengers.*.email'              => ['nullable','email'],
+            'passengers.*.phone'              => ['nullable','string','max:32'],
 
-            'passenger_email'       => ['nullable','email'],
-            'passenger_phone'       => ['nullable','string','max:32'],
-
-            'card_holder'           => ['required','string','max:150'],
-            'card_number'           => ['required','string','min:10','max:25'],
-            'card_exp'              => ['required','string'],
-            'card_cvv'              => ['required','string','min:3','max:4'],
+            'reservation_id' => ['nullable','uuid'],
+            'card_holder'    => ['required','string','max:150'],
+            'card_number'    => ['required','string','min:10','max:25'],
+            'card_exp'       => ['required','string','max:7'],
+            'card_cvv'       => ['required','string','min:3','max:4'],
         ]);
 
-        $product = Product::findOrFail($data['product_id']);
+        // Sayı eşleşmeleri
+        $seats = collect($v['seats'])->filter()->unique()->values()->all();
+        $passengers = collect($v['passengers'])->map(fn($p)=>[
+            'seat'        => (string) $p['seat'],
+            'first_name'  => trim($p['first_name']),
+            'last_name'   => trim($p['last_name']),
+            'doc_type'    => $p['doc_type'],
+            'national_id' => $p['doc_type']==='tc' ? ($p['national_id'] ?? null) : null,
+            'passport_no' => $p['doc_type']==='passport' ? ($p['passport_no'] ?? null) : null,
+            'nationality' => $p['doc_type']==='passport' ? ($p['nationality'] ?? 'TR') : 'TR',
+            'email'       => $p['email'] ?? null,
+            'phone'       => $p['phone'] ?? null,
+        ])->values()->all();
+
+        if ((int)$v['qty'] !== count($seats)) {
+            return response()->json(['status'=>false,'message'=>'Adet ile koltuk sayısı eşleşmiyor.'], 422);
+        }
+        if (count($passengers) !== count($seats)) {
+            return response()->json(['status'=>false,'message'=>'Yolcu sayısı ile koltuk sayısı eşleşmiyor.'], 422);
+        }
+
+        // Yolcu koltuklarının seats ile uyumu
+        $pSeats = collect($passengers)->pluck('seat')->all();
+        sort($pSeats); $sSeats = $seats; sort($sSeats);
+        if ($pSeats !== $sSeats) {
+            return response()->json(['status'=>false,'message'=>'Yolcu koltukları ile seçilen koltuklar uyuşmuyor.'], 422);
+        }
+
+        $product = Product::findOrFail($v['product_id']);
         if (!$product->is_active) {
             return response()->json(['status'=>false,'message'=>'Trip not available'], 422);
         }
 
-        // Koltukları normalize et
-        $seats = collect($data['seats'] ?? [])->filter()->unique()->values()->all();
-        if (count($seats) < 1) {
-            return response()->json(['status'=>false,'message'=>'En az 1 koltuk seçiniz.'], 422);
-        }
-        if (count($seats) > 10) {
-            return response()->json(['status'=>false,'message'=>'Maksimum 10 koltuk seçilebilir.'], 422);
-        }
-        if ((int)$data['qty'] !== count($seats)) {
-            return response()->json(['status'=>false,'message'=>'Adet ile koltuk sayısı eşleşmiyor.'], 422);
-        }
-
-        $order = DB::transaction(function () use ($request, $product, $data, $seats) {
+        $order = DB::transaction(function () use ($request, $product, $v, $seats, $passengers) {
             // 1) Aktif hold çatışması
             $conflictHolds = DB::table('seat_holds')
                 ->where('product_id', $product->id)
                 ->whereIn('seat', $seats)
                 ->where('expires_at', '>', now())
-                ->when($data['reservation_id'] ?? null, function ($q) use ($data) {
-                    $q->where('reservation_id', '<>', $data['reservation_id']);
+                ->when($v['reservation_id'] ?? null, function ($q) use ($v) {
+                    $q->where('reservation_id', '<>', $v['reservation_id']);
                 })
                 ->lockForUpdate()
                 ->pluck('seat')->all();
@@ -108,37 +132,49 @@ class OrderController extends Controller
             $conflicts = array_values(array_intersect($seats, $taken));
             if (!empty($conflicts)) {
                 abort(response()->json([
-                    'status'  => false,
-                    'message' => 'Seats already taken: '.implode(', ', $conflicts),
+                    'status'    => false,
+                    'message'   => 'Seats already taken: '.implode(', ', $conflicts),
                     'conflicts' => $conflicts,
                 ], 422));
             }
 
             // 3) Siparişi oluştur
             $unit  = (float) $product->cost;
-            $total = $unit * (int) $data['qty'];
+            $qty   = (int) $v['qty'];
+            $total = $unit * $qty;
 
-            $order = Order::create([
+            $first = $passengers[0];
+            $payload = [
                 'user_id'               => optional($request->user())->id,
                 'product_id'            => $product->id,
-                'qty'                   => $data['qty'],
+                'qty'                   => $qty,
                 'unit_price'            => $unit,
                 'total'                 => $total,
-                'passenger_name'        => $data['passenger_name'],
-                'passenger_doc'         => $data['passenger_doc_type'] ?? null,
-                'passenger_national_id' => ($data['passenger_doc_type'] ?? '') === 'tc' ? ($data['passenger_national_id'] ?? null) : null,
-                'passenger_passport_no' => ($data['passenger_doc_type'] ?? '') === 'passport' ? ($data['passenger_passport_no'] ?? null) : null,
-                'passenger_nationality' => $data['passenger_nationality'] ?? 'TR',
-                'passenger_email'       => $data['passenger_email'] ?? null,
-                'passenger_phone'       => $data['passenger_phone'] ?? null,
+
+                // Geriye dönük uyumluluk için ilk yolcuyu düz alanlara yaz
+                'passenger_name'        => trim($first['first_name'].' '.$first['last_name']),
+                'passenger_doc'         => $first['doc_type'],
+                'passenger_national_id' => $first['doc_type']==='tc' ? ($first['national_id'] ?? null) : null,
+                'passenger_passport_no' => $first['doc_type']==='passport' ? ($first['passport_no'] ?? null) : null,
+                'passenger_nationality' => $first['nationality'] ?? 'TR',
+                'passenger_email'       => $first['email'] ?? null,
+                'passenger_phone'       => $first['phone'] ?? null,
+
                 'seats'                 => $seats,
                 'pnr'                   => strtoupper(Str::random(6)),
                 'status'                => 'paid',
-            ]);
+            ];
+
+            // Varsa tüm yolcuları JSON sütununa da koy
+            if (Schema::hasColumn('orders','passengers')) {
+                $payload['passengers'] = $passengers;
+            }
+
+            $order = Order::create($payload);
 
             // 4) Bu rezervasyona ait hold’ları temizle
-            if (!empty($data['reservation_id'])) {
-                DB::table('seat_holds')->where('reservation_id', $data['reservation_id'])->delete();
+            if (!empty($v['reservation_id'])) {
+                DB::table('seat_holds')->where('reservation_id', $v['reservation_id'])->delete();
             }
 
             return $order->load([
@@ -148,7 +184,7 @@ class OrderController extends Controller
 
         return response()->json([
             'status'  => true,
-            'message' => 'Order created',
+            'message' => 'Satın alma başarılı.',
             'order'   => $order,
             'pnr'     => $order->pnr,
         ], 201);

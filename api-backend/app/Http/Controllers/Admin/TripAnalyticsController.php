@@ -52,7 +52,7 @@ class TripAnalyticsController extends Controller
             'email'      => $user?->email,
             'phone'      => $user?->phone,
             'role'       => $user?->role ?? 'personnel',
-            'company'    => $company ? ['id'=>$company->id, 'name'=>$company->name] : null,
+            'Company'    => $company ? ['id'=>$company->id, 'name'=>$company->name] : null,
             'created_at' => $user?->created_at,
         ]);
     }

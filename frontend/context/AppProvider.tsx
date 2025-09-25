@@ -6,14 +6,17 @@ import Cookies from "js-cookie";
 import { toast } from "react-hot-toast";
 
 /* ------------ Türler ------------ */
-type Role = "passenger" | "personnel" | "admin";
+type Role = "passenger" | "personnel" | "company_approver" | "admin";
+type Company = { id: number; name: string; code?: string };
+
 type User = {
     id: number;
     name: string;
     email: string;
     role: Role;
-    role_status?: "pending" | "active" | "rejected";
+    role_status?: "pending" | "company_approved" | "active" | "rejected";
     company_id?: number | null;
+    company?: Company | null;
 };
 type AuthResp = { status?: boolean; message?: string; token?: string; user?: User };
 
@@ -52,6 +55,23 @@ function pickErrMsg(err: unknown, fallback = "İşlem hatası") {
     return e?.response?.data?.message || e?.message || fallback;
 }
 
+/* ------------ Slug map ------------ */
+const COMPANY_SLUGS: Record<string,string> = {
+    toros: 'toros',
+    anka:  'anka',
+    mavi:  'mavi',
+    maviyol: 'mavi',
+    'mavi-yol': 'mavi',
+};
+
+const slugFromCompany = (u?:User|null) => {
+    const code = (u?.company?.code||'').toLowerCase();
+    if (COMPANY_SLUGS[code]) return COMPANY_SLUGS[code];
+    const nameKey = (u?.company?.name||'').toLowerCase().replace(/\s+/g,'');
+    if (COMPANY_SLUGS[nameKey]) return COMPANY_SLUGS[nameKey];
+    return 'ik';
+};
+
 /* ------------ Bağlam ------------ */
 const AppContext = createContext<AppProviderType | undefined>(undefined);
 
@@ -67,16 +87,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         else delete axios.defaults.headers.common["Authorization"];
     };
 
+    const slugFromCompany = (u?: User | null) => {
+        const rawCode = (u?.company?.code || "").toLowerCase();
+        if (COMPANY_SLUGS[rawCode]) return COMPANY_SLUGS[rawCode];
+        const nameKey = (u?.company?.name || "").toLowerCase().replace(/\s+/g, "");
+        if (COMPANY_SLUGS[nameKey]) return COMPANY_SLUGS[nameKey];
+        return "ik";
+    };
+
+    const roleHome = (u: User) => {
+        if (u.role === "admin") return "/dashboard/admin/approvals";
+        if (u.role === "company_approver") return `/dashboard/ik/${slugFromCompany(u)}`;
+        if (u.role === "personnel") return "/dashboard/personnel";
+        return "/dashboard/passenger";
+    };
+
     const goByRole = (u: User) => {
-        if (u.role === "admin") router.push("/dashboard/admin");
-        else if (u.role === "personnel") router.push("/dashboard/personnel");
-        else router.push("/dashboard/passenger");
+        const target = roleHome(u);
+        if (typeof window !== "undefined" && location.pathname !== target) {
+            router.replace(target);
+        }
     };
 
     /* ---- Interceptorlar ---- */
     useEffect(() => {
         const reqId = axios.interceptors.request.use((config) => {
-            // headers objesini yeniden atamadan mutasyona uğrat
             (config.headers as any) = config.headers || {};
             (config.headers as any)["Accept"] = "application/json";
             return config;
@@ -117,6 +152,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 const { data } = await axios.get<User>("/profile");
                 setUser(data);
                 Cookies.set("authUser", JSON.stringify(data), { expires: 7, sameSite: "lax" });
+                goByRole(data);
             } catch {
                 Cookies.remove("authToken");
                 Cookies.remove("authUser");
@@ -143,10 +179,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             const { data } = await axios.post<AuthResp>("/login", { email: em, password });
             if (!data?.token || !data?.user) { toast.error(data?.message || "Giriş başarısız."); return; }
-
-            if (data.user.role === "personnel" && data.user.role_status === "pending") {
-                toast.error("Personel başvurunuz onay bekliyor."); return;
-            }
 
             setToken(data.token);
             setUser(data.user);
@@ -177,6 +209,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!EMAIL_RE.test(em)) { toast.error("Geçerli e-posta girin."); return; }
         if (!PWD_RE.test(password)) { toast.error("Şifre en az 8 karakter ve harf+rakam içermeli."); return; }
         if (password !== password_confirmation) { toast.error("Şifreler eşleşmiyor."); return; }
+        // Backend register yalnızca passenger/personnel/admin kabul ediyor
         if (!["passenger", "personnel", "admin"].includes(role)) { toast.error("Geçerli rol seçin."); return; }
         if (role === "personnel" && !company_id) { toast.error("Personel için firma zorunlu."); return; }
 

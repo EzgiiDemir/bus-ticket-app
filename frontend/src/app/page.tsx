@@ -34,6 +34,9 @@ type ApiListProducts = { products: Trip[]; meta?: { current_page?: number; last_
 type ApiListData = { data: Trip[]; meta?: { current_page?: number; last_page?: number } };
 type ApiList = ApiListProducts | ApiListData | Trip[] | Record<string, any>;
 
+
+
+
 /* ---------------- Utils ---------------- */
 const toDate = (s?: string) => {
     if (!s) return null;

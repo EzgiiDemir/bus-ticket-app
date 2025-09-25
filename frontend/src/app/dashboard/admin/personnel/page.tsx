@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { myAppHook } from '../../../../../context/AppProvider';
 import { listPersonnel } from '../../../../lib/adminApi';
-import { exportCSV } from '@/app/lib/export';
 
 type Row = {
     id:number;
@@ -76,20 +75,6 @@ export default function AdminPersonnel(){
                         {[10,20,50,100].map(n=> <option key={n} value={n}>{n}/sayfa</option>)}
                     </select>
 
-                    <button
-                        className="rounded-xl border px-3 py-2"
-                        onClick={()=>{
-                            exportCSV('personel_tumu', filtered, [
-                                { key:'name', title:'Ad' },
-                                { key:'email', title:'E-posta' },
-                                { key:'company', title:'Firma', map:(r:Row)=> r.company?.name || '-' },
-                                { key:'role_status', title:'Durum' },
-                                { key:'trips', title:'Sefer' },
-                                { key:'seats', title:'Koltuk' },
-                                { key:'revenue', title:'Gelir', map:(r:Row)=> Number(r.revenue||0) },
-                            ]);
-                        }}
-                    >CSV</button>
                 </div>
             </div>
 

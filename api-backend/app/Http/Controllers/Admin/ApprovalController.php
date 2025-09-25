@@ -15,7 +15,7 @@ class ApprovalController extends Controller
     public function index()
     {
         // En garanti yöntem: pending personel kullanıcılarını getir
-        $users = User::with('company:id,name,code')
+        $users = User::with('Company:id,name,code')
             ->where('role', 'personnel')
             ->where('role_status', 'pending')
             ->orderByDesc('created_at')

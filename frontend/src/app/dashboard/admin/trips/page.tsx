@@ -5,7 +5,6 @@ import "moment/locale/tr";
 import { myAppHook } from "../../../../../context/AppProvider";
 import { listTrips } from "../../../../lib/adminApi";
 import { fmtTR } from "../../../../lib/datetime";
-import { exportCSV } from "@/app/lib/export";
 
 type Trip = {
     id:number; trip?:string;
@@ -87,21 +86,6 @@ export default function AdminTrips(){
                             onChange={e=>{ setPageSize(Number(e.target.value)); setPage(1); }}>
                         {[10,20,50,100].map(n=> <option key={n} value={n}>{n}/sayfa</option>)}
                     </select>
-                    <button className="rounded-xl border px-3 py-2"
-                            onClick={()=>{
-                                exportCSV("seferler_tumu", filtered, [
-                                    { key:"trip", title:"Sefer" },
-                                    { key:"company_name", title:"Firma", map:(r:Trip)=> r.company_name || r.company?.name || "" },
-                                    { key:"route", title:"Güzergah", map:(r:Trip)=> `${r.terminal_from} → ${r.terminal_to}` },
-                                    { key:"departure_time", title:"Kalkış" },
-                                    { key:"remaining", title:"Kalan", map:(r:Trip)=> humanRemain(r.departure_time, r.remaining_human) },
-                                    { key:"cost", title:"Ücret(TL)", map:(r:Trip)=> Number(r.cost_tl ?? normalizeMoney(r.cost)) },
-                                    { key:"capacity_reservation", title:"Kapasite" },
-                                    { key:"is_active", title:"Aktif", map:(r:Trip)=> r.is_active ? "Evet" : "Hayır" },
-                                    { key:"orders", title:"Sipariş", map:(r:Trip)=> toNum(r.orders) },
-                                    { key:"seats", title:"Koltuk", map:(r:Trip)=> toNum(r.seats) },
-                                ]);
-                            }}>CSV</button>
                 </div>
             </div>
 

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
 import { myAppHook } from '../../../../../context/AppProvider';
-import { exportCSV } from '@/app/lib/export';
 
 /* ---------- Tipler ---------- */
 type ProductLite = {
@@ -89,10 +88,6 @@ export default function Orders(){
     if (!token)    return <div className="p-6">Giriş yapın.</div>;
 
     const rows = page?.data ?? [];
-    const summary = useMemo(()=>({
-        count: rows.length,
-        total: rows.reduce((a,b)=> a + toNum(b.total), 0)
-    }),[rows]);
 
     return (
         <div className="space-y-4 text-indigo-900">
@@ -114,22 +109,7 @@ export default function Orders(){
                     >
                         {[10,20,50].map(n=> <option key={n} value={n}>{n}/sayfa</option>)}
                     </select>
-                    <button
-                        className="rounded-xl border px-3 py-2 disabled:opacity-50"
-                        onClick={()=>{
-                            exportCSV('siparisler_sayfa', rows, [
-                                { key:'pnr', title:'PNR' },
-                                { key:'product.trip', title:'Sefer', map:(o:Order)=>o.product?.trip || '' },
-                                { key:'route', title:'Güzergah', map:(o:Order)=>`${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}` },
-                                { key:'departure', title:'Kalkış', map:(o:Order)=>o.product?.departure_time || '' },
-                                { key:'qty', title:'Adet' },
-                                { key:'unit_price', title:'Birim', map:(o:Order)=>toNum(o.unit_price) },
-                                { key:'total', title:'Toplam', map:(o:Order)=>toNum(o.total) },
-                                { key:'created_at', title:'Sipariş Tarihi' },
-                            ]);
-                        }}
-                        disabled={!rows.length}
-                    >CSV</button>
+
                 </div>
             </div>
 
@@ -138,7 +118,6 @@ export default function Orders(){
             <div className="rounded-2xl border bg-white p-4">
                 <div className="mb-3 text-sm text-indigo-900/60">
                     Görüntülenen: <b>{page?.from ?? 0}–{page?.to ?? 0}</b> / {page?.total ?? 0} •
-                    &nbsp;Bu sayfada {summary.count} kayıt • Toplam: <b>{TRYc.format(summary.total)}</b>
                 </div>
 
                 <div className="overflow-x-auto">

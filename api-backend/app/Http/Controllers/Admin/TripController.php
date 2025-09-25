@@ -14,7 +14,7 @@ class TripController extends Controller
         $cid = $r->query('company_id');
         $q   = $r->query('q');
 
-        $rows = Product::with(['user:id,name','company:id,name'])
+        $rows = Product::with(['user:id,name','Company:id,name'])
             ->when($cid, fn($qq)=>$qq->where('company_id',$cid))
             ->when($q, fn($qq)=>$qq->where(function($w) use($q){
                 $w->where('trip','like',"%$q%")

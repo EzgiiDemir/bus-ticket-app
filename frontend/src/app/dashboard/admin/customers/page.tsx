@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, Fragment } from 'react';
 import { myAppHook } from '../../../../../context/AppProvider';
 import { api } from '@/app/lib/api';
 import { fmtTR } from '../../../../lib/datetime';
-import { exportCSV } from '@/app/lib/export';
 import { X, Eye } from 'lucide-react';
 
 type Cust = {
@@ -122,16 +121,6 @@ export default function AdminCustomers(){
                 if(p>200) break; // safety
             }catch(e){ break; }
         }
-        exportCSV(`orders_${modalCustomer.passenger_email || modalCustomer}`, all.map(o=>({
-            id: o.id, pnr: o.pnr, qty: o.qty, total: o.total, product: o.product?.trip ?? `${o.product?.terminal_from} → ${o.product?.terminal_to}`, date: o.created_at
-        })), [
-            { key: 'id', title: 'ID' },
-            { key: 'pnr', title: 'PNR' },
-            { key: 'product', title: 'Sefer' },
-            { key: 'qty', title: 'Adet' },
-            { key: 'total', title: 'Tutar' },
-            { key: 'date', title: 'Tarih' },
-        ]);
     };
 
     if (isLoading) return <div>Yükleniyor…</div>;
@@ -158,25 +147,6 @@ export default function AdminCustomers(){
                         {[10,20,50,100].map(n=> <option key={n} value={n}>{n}/sayfa</option>)}
                     </select>
 
-                    <button
-                        className="rounded-xl border px-3 py-2"
-                        onClick={()=> {
-                            exportCSV('musteriler_tumu', filtered.map(c=>({
-                                name: c.passenger_name,
-                                email: c.passenger_email,
-                                orders: c.orders,
-                                revenue: toNum(c.revenue),
-                                last_order_at: c.last_order_at
-                            })), [
-                                { key:'id', title:'Müşteri ID' },
-                                { key:'name', title:'Ad' },
-                                { key:'email', title:'E-posta' },
-                                { key:'orders', title:'Sipariş' },
-                                { key:'revenue', title:'Gelir' },
-                                { key:'last_order_at', title:'Son Sipariş' },
-                            ]);
-                        }}
-                    >CSV</button>
                 </div>
             </div>
 

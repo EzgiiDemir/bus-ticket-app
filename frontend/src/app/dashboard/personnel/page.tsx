@@ -5,7 +5,6 @@ import axios, { AxiosRequestConfig } from 'axios';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend
 } from 'recharts';
-import { exportCSV } from '@/app/lib/export';
 import { myAppHook } from '../../../../context/AppProvider';
 
 /* ---------- Types ---------- */
@@ -135,17 +134,6 @@ export default function Overview(){
                 <div className="xl:col-span-2 rounded-2xl border bg-white p-4">
                     <div className="flex items-center justify-between">
                         <h2 className="font-semibold text-indigo-900">Son 7 Gün Gelir</h2>
-                        <button
-                            className="px-3 py-1 rounded-lg border text-indigo-900"
-                            onClick={()=>{
-                                const rows = (stats?.daily||[]).map(d=>({ tarih:d.d, gelir:d.t }));
-                                exportCSV('son7gun_gelir', rows, [
-                                    { key:'tarih', title:'Tarih' },
-                                    { key:'gelir', title:'Gelir' },
-                                ]);
-                            }}
-                            aria-label="CSV dışa aktar"
-                        >CSV</button>
                     </div>
                     <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%">

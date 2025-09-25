@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
 import { myAppHook } from '../../../../../context/AppProvider';
-import { exportCSV } from '@/app/lib/export';
 
 /* ---------- Tipler ---------- */
 type Customer = { passenger_name:string; passenger_email:string; passenger_phone?:string|null };
@@ -64,29 +63,6 @@ export default function Customers(){
         return ()=> clearTimeout(t);
     },[q, safePer, isLoading, token, fetchPage]);
 
-    // CSV export: tüm sayfaları yetkili şekilde dolaş
-    const exportAll = useCallback(async ()=>{
-        try{
-            const all: Customer[] = [];
-            let url: string | null = `/personnel/customers?per_page=100${q ? `&q=${encodeURIComponent(q)}`:''}`;
-            for(let i=0;i<200;i++){
-                const { data } = await axios.get<any>(url, { headers:{ Accept:'application/json' } });
-                const rows: Customer[] = Array.isArray(data?.data) ? data.data : [];
-                all.push(...rows);
-                const next = toPath(data?.next_page_url);
-                if(!next) break;
-                url = next;
-            }
-            exportCSV('musteriler_tumu', all, [
-                { key:'passenger_name', title:'Ad' },
-                { key:'passenger_email', title:'E-posta' },
-                { key:'passenger_phone', title:'Telefon' },
-            ]);
-        }catch(e:any){
-            const p:ApiErr|undefined = e?.response?.data;
-            alert(p?.message || 'Dışa aktarma hatası');
-        }
-    },[q]);
 
     if (isLoading) return <div className="p-6">Yükleniyor…</div>;
     if (!token)    return <div className="p-6">Giriş yapın.</div>;
@@ -114,11 +90,7 @@ export default function Customers(){
                     >
                         {[10,20,50].map(n=> <option key={n} value={n}>{n}/sayfa</option>)}
                     </select>
-                    <button
-                        className="rounded-xl border px-3 py-2 disabled:opacity-50"
-                        onClick={exportAll}
-                        disabled={loading}
-                    >CSV</button>
+
                 </div>
             </div>
 

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/app/lib/api';
 import { myAppHook } from '../../../../context/AppProvider';
 import { fmtTR } from '@/app/lib/datetime';
-import { exportCSV, exportJSON } from '@/app/lib/export';
 
 /* ------------ Tipler ------------ */
 type Order = {
@@ -161,7 +160,6 @@ export default function PassengerOverview() {
                 { key: 'total', title: 'Toplam' },
                 { key: 'Sipariş Tarihi', title: 'Sipariş Tarihi', map: (o: Order) => fmtTR(o.created_at)},
             ];
-            exportCSV('siparislerim_tumu', all, cols as any);
         }catch(e:any){
             const p:ApiErr|undefined = e?.response?.data;
             alert(p?.message || e?.message || 'Dışa aktarma hatası');
@@ -189,10 +187,7 @@ export default function PassengerOverview() {
                         <div className="text-xs text-indigo-900/60">Dışa Aktarım</div>
                         <div className="text-sm text-indigo-900/80 mt-1">Tüm siparişlerin tamamı</div>
                     </div>
-                    <div className="flex gap-2">
-                        <button className="px-3 py-2 rounded-lg border disabled:opacity-50" onClick={exportAllCSV} disabled={isLoading}>CSV</button>
-                        <button className="px-3 py-2 rounded-lg border" onClick={()=>exportJSON('ozet', summary)}>JSON</button>
-                    </div>
+
                 </div>
             </div>
 

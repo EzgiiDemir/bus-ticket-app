@@ -6,6 +6,7 @@ use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Models\SeatOverride;
 
 class PublicProductController extends Controller
 {
@@ -42,6 +43,7 @@ class PublicProductController extends Controller
 
     public function show(Product $product)
     {
+        $now = now();
         if (!$product->is_active) {
             return response()->json(['message' => 'Not found'], 404);
         }
@@ -95,6 +97,27 @@ class PublicProductController extends Controller
                 ->filter(fn($s) => is_string($s) && $s !== '')
                 ->unique()->all()
         );
+        $overrides = SeatOverride::query()
+            ->where('product_id', $product->id)
+            ->where(function($q) use ($now) {
+                $q->whereNull('starts_at')->orWhere('starts_at','<=',$now);
+            })
+            ->where(function($q) use ($now) {
+                $q->whereNull('ends_at')->orWhere('ends_at','>=',$now);
+            })
+            ->get(['seat_code','type','label','reason'])
+            ->map(function($o){
+                return [
+                    'code'   => strtoupper($o->seat_code),
+                    'type'   => $o->type,          // 'fault' | 'blocked'
+                    'label'  => $o->label ?? ($o->type==='fault'?'Arıza':'Kapalı'),
+                    'reason' => $o->reason,
+                ];
+            });
+        $takenSeats = collect($product->orders_items ?? []) // senin yapına göre uyarlarsın
+        ->pluck('seat_code')->filter()->map(fn($s)=>strtoupper($s))->values();
+
+        $disabledCodes = $overrides->pluck('code');
 
         return response()->json([
             'id'                  => $product->id,
@@ -111,7 +134,9 @@ class PublicProductController extends Controller
             'important_notes'     => $product->important_notes,
             'cancellation_policy' => $product->cancellation_policy,
             'seat_map'            => ['layout' => $layout, 'rows' => $rows],
-            'taken_seats'         => $taken,
+            'taken_seats'    => $takenSeats->values(),
+            'disabled_seats' => $overrides->values(),
+            'blocked_all'    => $takenSeats->merge($disabledCodes)->unique()->values(),
             'is_active'           => (bool) $product->is_active,
         ]);
     }

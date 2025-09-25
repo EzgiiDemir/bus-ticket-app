@@ -15,7 +15,7 @@ class PeopleController extends Controller
         $q  = $r->query('q');
         $cid= $r->query('company_id');
 
-        $rows = User::with('company:id,name')
+        $rows = User::with('Company:id,name')
             ->where('role','personnel')
             ->when($cid, fn($qq)=>$qq->where('company_id',$cid))
             ->when($q, fn($qq)=>$qq->where(function($w) use($q){

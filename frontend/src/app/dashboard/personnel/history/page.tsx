@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
 import { myAppHook } from '../../../../../context/AppProvider';
-import { exportCSV } from '@/app/lib/export';
 
 /* ---------- Tipler ---------- */
 type Trip = {
@@ -154,21 +153,6 @@ export default function HistoryPage(){
                             </button>
                         ))}
                     </div>
-                    <button
-                        onClick={()=>exportCSV('sefer_gecmisi', filtered, [
-                            { key:'trip', title:'Sefer' },
-                            { key:'company_name', title:'Firma' },
-                            { key:'terminal_from', title:'Kalkış' },
-                            { key:'terminal_to', title:'Varış' },
-                            { key:'departure_time', title:'Kalkış' },
-                            { key:'created_at', title:'Oluşturulma' },
-                            { key:'cost', title:'Ücret', map:(r:Trip)=> Number((r as any).cost||0) },
-                            { key:'capacity_reservation', title:'Kapasite' },
-                        ])}
-                        className="rounded-xl border px-4 py-2"
-                    >
-                        CSV
-                    </button>
                 </div>
             </div>
 

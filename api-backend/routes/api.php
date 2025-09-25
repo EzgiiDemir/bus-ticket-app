@@ -1,6 +1,10 @@
 <?php
 
 use App\Http\Controllers\Admin\PeopleController;
+use App\Http\Controllers\AdminApprovalController;
+use App\Http\Controllers\Company\DashboardController;
+use App\Http\Controllers\CompanyApprovalController;
+use App\Http\Controllers\Personnel\SeatOverrideController;
 use App\Http\Controllers\SeatHoldController;
 use App\Http\Controllers\Admin\TripAnalyticsController;
 use App\Http\Controllers\PublicProductController;
@@ -8,7 +12,6 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
-use App\Http\Controllers\Admin\ApprovalController;
 use App\Models\Company;
 use App\Models\Terminal;
 
@@ -37,12 +40,25 @@ response()->json(
 Route::post('/seat-holds', [SeatHoldController::class,'store']);
 Route::delete('/seat-holds/{reservation}', [SeatHoldController::class,'destroy']);
 Route::post('/seat-holds/{reservation}/extend', [SeatHoldController::class,'extend']);
+
+
 // --- Auth (genel) ---
 Route::post('/register',[AuthController::class,'register']);
 Route::post('/login',[AuthController::class,'login']);
 Route::post('/password/forgot',[AuthController::class,'forgotPassword']);
 Route::post('/password/reset',[AuthController::class,'resetPassword']);
 
+Route::prefix('admin')->middleware(['auth:sanctum','admin.only'])->group(function () {
+    Route::get('/trips/{product}/creator', [TripAnalyticsController::class, 'creator']);
+    Route::get('/trips/{product}/buyers',  [TripAnalyticsController::class, 'buyers']);
+    Route::get('/customers', [PeopleController::class, 'customers']);
+    Route::get('/customers/{identifier}/orders', [PeopleController::class, 'customerOrders']);
+
+    // SADECE BU approvals seti kalsın
+    Route::get('/approvals', [AdminApprovalController::class,'index']);
+    Route::post('/approvals/{id}/approve', [AdminApprovalController::class,'approve']);
+    Route::post('/approvals/{id}/reject',  [AdminApprovalController::class,'reject']);
+});
 Route::prefix('admin')
     ->middleware(['auth:sanctum','admin'])
     ->group(function () {
@@ -54,6 +70,32 @@ Route::prefix('admin')
     });
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/stats', [DashboardController::class,'stats']);
+
+
+    Route::prefix('Company')->middleware('Company.approver')->group(function () {
+        Route::get('/approvals', [CompanyApprovalController::class,'index']);
+        Route::post('/approvals/{id}/approve', [CompanyApprovalController::class,'approve']);
+        Route::post('/approvals/{id}/reject',  [CompanyApprovalController::class,'reject']);
+
+
+    });
+
+    // Admin
+    Route::prefix('admin')->middleware('admin.only')->group(function () {
+        Route::get('/approvals', [AdminApprovalController::class,'index']);
+        Route::post('/approvals/{id}/approve', [AdminApprovalController::class,'approve']);
+        Route::post('/approvals/{id}/reject',  [AdminApprovalController::class,'reject']);
+
+    });
+    Route::middleware('auth:sanctum')->group(function () {
+        // Company approver
+        Route::prefix('Company')->middleware('Company.approver')->group(function () {
+            Route::get('/approvals', [CompanyApprovalController::class,'index']);
+            Route::post('/approvals/{id}/approve', [CompanyApprovalController::class,'approve']);
+            Route::post('/approvals/{id}/reject',  [CompanyApprovalController::class,'reject']);
+
+        });
     // profil
     Route::get('/profile',[AuthController::class,'profile']);
     Route::put('/me',[AuthController::class,'updateProfile']);
@@ -74,7 +116,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // dashboard
         Route::get('/dashboard/overview', [\App\Http\Controllers\Admin\DashboardController::class,'overview']);
         Route::get('/dashboard/revenue-timeseries', [\App\Http\Controllers\Admin\DashboardController::class,'revenueTimeseries']);
-        Route::get('/dashboard/company-breakdown', [\App\Http\Controllers\Admin\DashboardController::class,'companyBreakdown']);
+        Route::get('/dashboard/Company-breakdown', [\App\Http\Controllers\Admin\DashboardController::class,'companyBreakdown']);
         Route::get('/dashboard/top-routes', [\App\Http\Controllers\Admin\DashboardController::class,'topRoutes']);
 
         // listeler
@@ -83,10 +125,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/companies', [\App\Http\Controllers\Admin\CompanyController::class,'index']);
         Route::get('/trips', [\App\Http\Controllers\Admin\TripController::class,'index']);
 
-        // onay akışı
-        Route::get('/approvals', [ApprovalController::class,'index']);
-        Route::post('/approvals/{user}/approve', [ApprovalController::class,'approve']);
-        Route::post('/approvals/{user}/reject', [ApprovalController::class,'reject']);
     });
 
     // --- PERSONNEL ---
@@ -97,12 +135,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/products/{product}/orders', [\App\Http\Controllers\Personnel\PeopleController::class, 'ordersByProduct']);
 
         Route::prefix('personnel')->group(function () {
+            Route::get('/products/{product}/seat-overrides', [SeatOverrideController::class,'index']);
+            Route::post('/products/{product}/seat-overrides', [SeatOverrideController::class,'store']);
+            Route::delete('/products/{product}/seat-overrides/{override}', [SeatOverrideController::class,'destroy']);
             Route::get('/stats', [\App\Http\Controllers\Personnel\StatsController::class,'index']);
             Route::get('/orders', [\App\Http\Controllers\Personnel\PeopleController::class,'orders']);
             Route::get('/customers', [\App\Http\Controllers\Personnel\PeopleController::class,'customers']);
-            Route::get('/company', fn () => response()->json(
+            Route::get('/Company', fn () => response()->json(
                 Company::select('id','name','code')->find(request()->user()->company_id)
             ));
         });
     });
+});
 });

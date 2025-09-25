@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminOnly::class,
             'personnel.active' => \App\Http\Middleware\PersonnelActive::class,
+            'admin.only'      => \App\Http\Middleware\AdminOnly::class,
+            'Company.approver'=> \App\Http\Middleware\CompanyApprover::class,
+
         ]);
 
         // (opsiyonel) grup eklemiyorsan başka ayar gerekmez

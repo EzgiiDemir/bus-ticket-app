@@ -12,12 +12,12 @@ class CompanyController extends Controller
         $user = $request->user();
 
         // İlişki yoksa basit bir payload dön.
-        $company = method_exists($user, 'company') && $user->relationLoaded('company')
+        $company = method_exists($user, 'Company') && $user->relationLoaded('Company')
             ? $user->company
-            : (method_exists($user, 'company') ? $user->company()->first() : null);
+            : (method_exists($user, 'Company') ? $user->company()->first() : null);
 
         return response()->json([
-            'company' => $company
+            'Company' => $company
                 ? [
                     'id' => $company->id,
                     'name' => $company->name ?? 'N/A',

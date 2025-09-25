@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { myAppHook } from '../../../../../context/AppProvider';
 import { listCompanies } from '../../../../lib/adminApi';
-import { exportCSV } from '@/app/lib/export';
 
 type Co = {
     id:number;
@@ -72,21 +71,6 @@ export default function AdminCompanies(){
                     >
                         {[10,20,50,100].map(n=> <option key={n} value={n}>{n}/sayfa</option>)}
                     </select>
-
-
-
-                    <button
-                        className="rounded-xl border px-3 py-2"
-                        onClick={()=>{
-                            exportCSV('firmalar_tumu', filtered, [
-                                { key:'name', title:'Ad' },
-                                { key:'code', title:'Kod' },
-                                { key:'trips', title:'Sefer' },
-                                { key:'personnel', title:'Personel' },
-                                { key:'revenue', title:'Gelir', map:(r:Co)=> toNum(r.revenue) },
-                            ]);
-                        }}
-                    >CSV</button>
                 </div>
             </div>
 
