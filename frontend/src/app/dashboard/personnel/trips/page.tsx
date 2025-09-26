@@ -1,7 +1,8 @@
+// app/dashboard/ik/.../Trips.tsx  (Seferler)
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import { myAppHook } from '../../../../../context/AppProvider';
 
 /* ---------------- Types ---------------- */
@@ -28,7 +29,6 @@ type Company = { id:number; name:string; code:string };
 type Terminal = { id:number; name:string; city:string; code:string };
 type ApiErr = { message?:string; errors?:Record<string, string[]|string> };
 
-/* ---------------- Helpers ---------------- */
 const toNum = (v:any)=> Number((typeof v==='string' ? v.replace(',','.') : v) || 0);
 const clamp = (n:number, min:number, max:number)=> Math.max(min, Math.min(max, n));
 const fmtTR = (iso?:string) =>
@@ -36,9 +36,37 @@ const fmtTR = (iso?:string) =>
 const fmtTL = (n:any) =>
     new Intl.NumberFormat('tr-TR',{ style:'currency', currency:'TRY', maximumFractionDigits:2 }).format(Number(n||0));
 
-/* ---------------- Page ---------------- */
 export default function Trips(){
     const { token, isLoading } = (myAppHook() as any) || {};
+
+    /* --------- Axios taban ayarı + yetkili kısayollar --------- */
+    useEffect(()=>{
+        const base = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+        axios.defaults.baseURL = base;
+        axios.defaults.withCredentials = true;
+    },[]);
+    const withAuthHeaders = (cfg?:AxiosRequestConfig):AxiosRequestConfig => {
+        const headers:any = { Accept:'application/json', ...(cfg?.headers||{}) };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        return { ...cfg, headers };
+    };
+    const GET = useCallback(async <T=any,>(path:string, cfg?:AxiosRequestConfig)=> {
+        const { data } = await axios.get<T>(path, withAuthHeaders(cfg));
+        return data;
+    },[token]);
+    const POST = useCallback(async <T=any,>(path:string, body:any, cfg?:AxiosRequestConfig)=> {
+        const { data } = await axios.post<T>(path, body, withAuthHeaders(cfg));
+        return data;
+    },[token]);
+    const PUT = useCallback(async <T=any,>(path:string, body:any, cfg?:AxiosRequestConfig)=> {
+        const { data } = await axios.put<T>(path, body, withAuthHeaders(cfg));
+        return data;
+    },[token]);
+    const DEL = useCallback(async (path:string, cfg?:AxiosRequestConfig)=> {
+        await axios.delete(path, withAuthHeaders(cfg));
+    },[token]);
+
+    /* --------- State --------- */
     const [rows,setRows]=useState<Trip[]>([]);
     const [q,setQ]=useState('');
     const [open,setOpen]=useState(false);
@@ -46,19 +74,19 @@ export default function Trips(){
     const [myCompany, setMyCompany] = useState<Company|null>(null);
     const [err,setErr] = useState('');
 
-    // pagination
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
 
-    // canlı saat (30 sn)
+    // Kalkışa 60dk kala aktif seferleri otomatik pasife çekmek için zaman nabzı
     const [now, setNow] = useState<number>(Date.now());
     useEffect(()=>{ const t=setInterval(()=>setNow(Date.now()), 30000); return ()=>clearInterval(t); },[]);
 
+    /* --------- Yükleme --------- */
     const load = useCallback(async ()=>{
         if(!token) return;
         setErr('');
         try{
-            const { data } = await axios.get('/products', { headers:{ Accept:'application/json' } });
+            const data:any = await GET('/products');
             const arr:Trip[] = Array.isArray(data?.products) ? data.products : (data?.data||[]);
             setRows(Array.isArray(arr) ? arr : []);
         }catch(e:any){
@@ -66,26 +94,26 @@ export default function Trips(){
             setErr(p?.message || 'Seferler alınamadı.');
             setRows([]);
         }
-    },[token]);
+    },[token, GET]);
 
     useEffect(()=>{
         if (isLoading || !token) return;
         (async ()=>{
             try{
-                const { data } = await axios.get('/personnel/company', { headers:{ Accept:'application/json' } });
+                const data:any = await GET('/personnel/company');
                 setMyCompany(data || null);
             }catch{ setMyCompany(null); }
             await load();
         })();
-    },[isLoading, token, load]);
+    },[isLoading, token, load, GET]);
 
-    // dakika hesap
+    /* --------- Zaman yardımcıları --------- */
     const minutesLeft = (dt:string)=>{
-        const s = dt.includes('T')? dt : dt.replace(' ','T');
+        const s = dt?.includes?.('T')? dt : String(dt||'').replace(' ','T');
         return Math.floor((new Date(s).getTime() - now)/60000);
     };
 
-    // otomatik kapatma (<=60dk ve is_active=true)
+    /* --------- Kalkışa ≤60dk kalanları tek sefer pasif et --------- */
     const closedOnce = useRef<Set<number>>(new Set());
     useEffect(()=>{
         if (isLoading || !token || !rows.length) return;
@@ -97,15 +125,15 @@ export default function Trips(){
                 await Promise.all(
                     toCall.map(t=>{
                         closedOnce.current.add(t.id);
-                        return axios.put(`/products/${t.id}`, { is_active:false }, { headers:{ Accept:'application/json' } }).catch(()=>{});
+                        return PUT(`/products/${t.id}`, { is_active:false }).catch(()=>{});
                     })
                 );
                 await load();
-            }catch{/* yut */}
+            }catch{}
         })();
-    },[rows, now, isLoading, token, load]);
+    },[rows, now, isLoading, token, load, PUT]);
 
-    // filtre + şirket kısıtı
+    /* --------- Filtre + sayfalama --------- */
     const filtered = useMemo(()=>{
         const ql = q.trim().toLowerCase();
         let base = rows;
@@ -113,7 +141,6 @@ export default function Trips(){
         return ql ? base.filter(r => JSON.stringify(r).toLowerCase().includes(ql)) : base;
     },[rows,q,myCompany]);
 
-    // son 1 saate kalanlar bildirimi
     const closingSoon = useMemo(()=> filtered.filter(r=>{
         const m = minutesLeft(r.departure_time);
         return m>0 && m<=60;
@@ -133,14 +160,92 @@ export default function Trips(){
         return null;
     };
 
+    /* ================= CSV alt yapı: Sunucu → İstemci fallback ================= */
+    // 1) CSV kaçış + BOM + ; ayırıcı (Excel/TR uyumlu)
+    const csvEscape = (v:any) => {
+        const s = v==null ? '' : String(v);
+        return /[\";\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+    };
+    const buildCsv = (headings:string[], rows:(string|number)[][]) => {
+        const bom = '\uFEFF';
+        const head = headings.length ? headings.map(csvEscape).join(';') + '\n' : '';
+        const body = rows.map(r=>r.map(csvEscape).join(';')).join('\n');
+        return bom + head + body + (body ? '\n' : '');
+    };
+    const download = (filename:string, text:string) => {
+        const blob = new Blob([text], { type:'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    };
+
+    // 2) Sunucu varsa oraya post et; yoksa buildCsv ile indir
+    const saveCsv = async (filename:string, headings:string[], rows:(string|number)[][]) => {
+        try{
+            const res = await fetch('/company/export/array', {
+                method:'POST',
+                headers:{ 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) },
+                body: JSON.stringify({ filename, headings, rows })
+            });
+            if(!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = filename;
+            document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+        }catch{
+            const text = buildCsv(headings, rows);
+            download(filename, text);
+        }
+    };
+
+    // 3) Trips özel CSV dönüştürücüleri
+    const tripRowToCells = (r:Trip):(string|number)[] => ([
+        r.id,
+        r.trip || `${r.terminal_from} - ${r.terminal_to}`,
+        r.company_name || '',
+        r.terminal_from,
+        r.terminal_to,
+        fmtTR(r.departure_time),
+        typeof r.cost==='number' ? r.cost : Number(r.cost||0),
+        r.capacity_reservation,
+        r.duration || '',
+        r.bus_type || '',
+        (r.route?.length ?? 0),
+        r.is_active ? 'Evet' : 'Hayır'
+    ]);
+    const tripHeadings = ['ID','Sefer','Firma','Kalkış','Varış','Kalkış Zamanı','Ücret','Kapasite','Süre','Otobüs','Durak Sayısı','Aktif'];
+
+    // Ekrandaki sayfa CSV
+    const exportPageCsv = ()=> saveCsv(
+        `seferler_sayfa_${page}.csv`,
+        tripHeadings,
+        paged.map(tripRowToCells)
+    );
+
+    // Filtrelenmiş tüm kayıtlar CSV
+    const exportAllCsv = ()=> saveCsv(
+        `seferler_filtrelenmis_tumu.csv`,
+        tripHeadings,
+        filtered.map(tripRowToCells)
+    );
+
+    // Tek satır CSV (satır yanındaki buton)
+    const exportOneCsv = (r:Trip)=> saveCsv(
+        `sefer_${r.id}.csv`,
+        tripHeadings,
+        [tripRowToCells(r)]
+    );
+
+    /* ---------------- UI ---------------- */
     if (isLoading) return <div className="p-6">Yükleniyor…</div>;
     if (!token)    return <div className="p-6">Giriş yapın.</div>;
 
     return (
         <div className="space-y-4 text-indigo-900/80">
+            {/* Hata kutusu */}
             {err && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 whitespace-pre-line">{err}</div>}
 
-            {/* Uyarı kutusu */}
+            {/* Son 1 saat uyarısı */}
             {closingSoon.length>0 && (
                 <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3">
                     <div className="font-semibold text-amber-900">Son 1 saate kalan {closingSoon.length} sefer var.</div>
@@ -153,9 +258,9 @@ export default function Trips(){
                 </div>
             )}
 
+            {/* Başlık + Arama + CSV + Yeni */}
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <h1 className="text-2xl font-bold text-indigo-900">Seferler</h1>
-
                 <div className="flex items-center gap-2">
                     <input
                         className="rounded-xl border px-3 py-2"
@@ -164,20 +269,20 @@ export default function Trips(){
                         onChange={e=>{ setQ(e.target.value); setPage(1); }}
                         aria-label="Sefer ara"
                     />
-                    <button
-                        onClick={()=>{setEdit(null);setOpen(true);}}
-                        className="rounded-xl bg-indigo-600 text-white px-4 py-2"
-                    >
-                        Yeni Sefer
-                    </button>
+                    <div className="flex gap-2">
+                        <button className="px-3 py-1 rounded-lg border" onClick={exportPageCsv}>Sayfa CSV</button>
+                        <button className="px-3 py-1 rounded-lg border" onClick={exportAllCsv}>Tümü CSV</button>
+                        <button onClick={()=>{setEdit(null);setOpen(true);}} className="rounded-xl bg-indigo-600 text-white px-4 py-2">Yeni Sefer</button>
+                    </div>
                 </div>
             </div>
 
-            {/* Desktop/tablet */}
+            {/* Desktop tablo */}
             <div className="hidden md:block rounded-2xl border bg-white p-4">
                 <table className="w-full text-sm">
                     <thead>
                     <tr className="text-left text-indigo-900/60">
+                        <th className="py-2">ID</th>
                         <th className="py-2">Sefer</th>
                         <th>Firma</th>
                         <th>Güzergâh</th>
@@ -197,6 +302,7 @@ export default function Trips(){
                         const rowDim = (m<=60) ? 'opacity-70' : '';
                         return (
                             <tr key={r.id} className={`border-t ${rowDim}`}>
+                                <td className="py-2">{r.id}</td>
                                 <td className="py-2 font-medium">
                                     <div className="flex items-center gap-2">
                                         <span>{r.trip || `${r.terminal_from} - ${r.terminal_to}`}</span>
@@ -213,26 +319,31 @@ export default function Trips(){
                                 <td>{r.route?.length ?? 0}</td>
                                 <td>{(r.is_active ? 'Evet' : 'Hayır')}</td>
                                 <td className="text-right whitespace-nowrap">
-                                    <button
-                                        className="px-2 py-1 rounded-lg border mr-2 disabled:opacity-50"
-                                        disabled={m<=60}
-                                        title={m<=60 ? 'Kalkışa ≤60 dk. Düzenleme pasif' : 'Düzenle'}
-                                        onClick={()=>{setEdit(r);setOpen(true);}}
-                                    >
-                                        Düzenle
-                                    </button>
+                                    <div className="flex justify-end gap-2">
+                                        <button
+                                            className="px-2 py-1 rounded-lg border mr-0 disabled:opacity-50"
+                                            disabled={m<=60}
+                                            title={m<=60 ? 'Kalkışa ≤60 dk. Düzenleme pasif' : 'Düzenle'}
+                                            onClick={()=>{setEdit(r);setOpen(true);}}
+                                        >Düzenle</button>
+                                        <button
+                                            className="px-2 py-1 rounded-lg border"
+                                            title="Bu satırı CSV olarak indir"
+                                            onClick={()=>exportOneCsv(r)}
+                                        >CSV</button>
+                                    </div>
                                 </td>
                             </tr>
                         );
                     })}
                     {paged.length===0 && (
-                        <tr><td colSpan={11} className="py-6 text-center text-indigo-900/50">Kayıt yok</td></tr>
+                        <tr><td colSpan={12} className="py-6 text-center text-indigo-900/50">Kayıt yok</td></tr>
                     )}
                     </tbody>
                 </table>
             </div>
 
-            {/* Mobile */}
+            {/* Mobile kartlar */}
             <div className="md:hidden space-y-3">
                 {paged.map(r=>{
                     const m = minutesLeft(r.departure_time);
@@ -242,10 +353,10 @@ export default function Trips(){
                             <div className="flex items-center justify-between gap-3">
                                 <div className="font-semibold">{r.trip || `${r.terminal_from} - ${r.terminal_to}`}</div>
                                 <div className="flex items-center gap-2">
-                                    <DisableBadge m={m}/>
-                                    <span className="text-xs px-2 py-1 rounded-lg border">{r.is_active?'Aktif':'Pasif'}</span>
+                                    <DisableBadge m={m}/><span className="text-xs px-2 py-1 rounded-lg border">{r.is_active?'Aktif':'Pasif'}</span>
                                 </div>
                             </div>
+                            <div className="mt-1 text-xs text-indigo-900/60">ID: {r.id}</div>
                             <div className="mt-2 text-sm grid grid-cols-2 gap-y-1">
                                 <div className="text-indigo-900/60">Firma</div><div>{r.company_name || '-'}</div>
                                 <div className="text-indigo-900/60">Güzergâh</div><div className="truncate">{r.terminal_from} → {r.terminal_to}</div>
@@ -261,16 +372,13 @@ export default function Trips(){
                                         disabled={m<=60}
                                         title={m<=60 ? 'Kalkışa ≤60 dk. Düzenleme pasif' : 'Düzenle'}
                                         onClick={()=>{setEdit(r);setOpen(true);}}>Düzenle</button>
+                                <button className="px-3 py-1 rounded-lg border" onClick={()=>exportOneCsv(r)}>Satır CSV</button>
                                 <button className="px-3 py-1 rounded-lg border"
                                         onClick={async()=>{
                                             if(!token || isLoading) return alert('Giriş yapın');
                                             if(confirm('Silinsin mi?')){
-                                                try{
-                                                    await axios.delete(`/products/${r.id}`, { headers:{ Accept:'application/json' } });
-                                                    await load();
-                                                }catch(e:any){
-                                                    alert(e?.response?.data?.message || 'Silme hatası');
-                                                }
+                                                try{ await DEL(`/products/${r.id}`); await load(); }
+                                                catch(e:any){ alert(e?.response?.data?.message || 'Silme hatası'); }
                                             }
                                         }}>Sil</button>
                             </div>
@@ -278,17 +386,13 @@ export default function Trips(){
                     );
                 })}
                 {paged.length===0 && (
-                    <div className="rounded-2xl border bg-white p-6 text-center text-indigo-900/50">
-                        Kayıt yok
-                    </div>
+                    <div className="rounded-2xl border bg-white p-6 text-center text-indigo-900/50">Kayıt yok</div>
                 )}
             </div>
 
             {/* Pagination */}
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-indigo-900/60">
-                    Toplam <b>{total}</b> kayıt • Sayfa {page}/{totalPages}
-                </div>
+                <div className="text-sm text-indigo-900/60">Toplam <b>{total}</b> kayıt • Sayfa {page}/{totalPages}</div>
                 <div className="flex items-center gap-2">
                     <select
                         className="rounded-xl border px-2 py-1"
@@ -311,6 +415,7 @@ export default function Trips(){
                 </div>
             </div>
 
+            {/* Modallar */}
             {open && (
                 <TripModal
                     initial={edit}
@@ -318,8 +423,7 @@ export default function Trips(){
                     onSaved={async()=>{ setOpen(false); setEdit(null); await load(); }}
                 />
             )}
-
-            {/* HATA DÜZELTİLDİ: initial değil, edit kullanılmalı */}
+            {/* Düzenleme modundayken koltuk arıza/kapalı paneli */}
             {edit && <SeatOverridesPanel productId={edit.id} />}
         </div>
     );
@@ -337,6 +441,7 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         is_active:1, capacity_reservation:0, route:[], bus_type:'2+1'
     });
 
+    // Terminal listesi + ilk değerlerin kurulumu
     useEffect(()=>{
         let mounted=true;
         (async()=>{
@@ -359,6 +464,7 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         return ()=>{ mounted=false; };
     },[initial]);
 
+    // Form değişim kısayolu + sefer adı otomatik üret
     const change=(k:keyof Trip, v:any)=>{
         setForm(s=>{
             const next:any = { ...s, [k]:v };
@@ -369,6 +475,7 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         });
     };
 
+    // Durak CRUD
     const addStop=()=> setForm(s=>({...s, route:[...(s.route||[]), {name:'', time:''}]}));
     const setStop=(i:number, k:'name'|'time', v:string)=> setForm(s=>{
         const r=[...(s.route||[])]; r[i]={...r[i], [k]:v}; return {...s, route:r};
@@ -377,12 +484,14 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         const r=[...(s.route||[])]; r.splice(i,1); return {...s, route:r};
     });
 
+    // Kalkış/varış swap
     const swapFromTo=()=> setForm(s=>{
         const from = s.terminal_from; const to = s.terminal_to;
         const trip = (to && from) ? `${to} - ${from}` : s.trip;
         return { ...s, terminal_from: to, terminal_to: from, trip };
     });
 
+    // Basit doğrulama
     const validate = ()=>{
         const errors:string[] = [];
         const from = String(form.terminal_from||'').trim();
@@ -401,7 +510,7 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
         return { ok: errors.length===0, msg: errors.join('\n') };
     };
 
-    // ---- EKLENDİ: zaman ve rota normalizasyonu
+    /* ---- Durak zamanı normalize: "50dk", "2s 10dk" veya "19:45" gibi değerleri tek tipe çevir ---- */
     const normalizeStopTime = (raw: string) => {
         const t = String(raw || "").trim().toLowerCase();
         if (!t) return "";
@@ -426,8 +535,8 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
             .filter(s => s.stop.length > 0);
         return r.length ? r : undefined;
     };
-    // ---- EKLENDİ SON
 
+    // Kaydet
     const save=async()=>{
         if (isLoading || !token) { alert('Önce giriş yapın'); return; }
         const v = validate();
@@ -454,8 +563,8 @@ function TripModal({onClose,onSaved,initial}:{onClose:()=>void; onSaved:()=>void
 
         try{
             setErr('');
-            if(initial) await axios.put(`/products/${initial.id}`, base, { headers:{ Accept:'application/json' } });
-            else        await axios.post('/products', base, { headers:{ Accept:'application/json' } });
+            if(initial) await axios.put(`/products/${initial.id}`, base, );
+            else        await axios.post('/products', base, );
             onSaved();
         }catch(e:any){
             const p:ApiErr|undefined = e?.response?.data;
@@ -620,7 +729,7 @@ function SeatOverridesPanel({productId}:{productId:number}) {
         try{
             const { data } = await axios.get(`/personnel/products/${productId}/seat-overrides`, { headers:{ Accept:'application/json' } });
             setItems(Array.isArray(data)? data: []);
-        } catch(e:any){ setItems([]); }
+        } catch { setItems([]); }
     },[productId]);
 
     useEffect(()=>{ load(); },[load]);
@@ -643,7 +752,7 @@ function SeatOverridesPanel({productId}:{productId:number}) {
         try{
             await axios.delete(`/personnel/products/${productId}/seat-overrides/${id}`, { headers:{ Accept:'application/json' } });
             await load();
-        }catch(e:any){}
+        }catch{}
     };
 
     return (

@@ -1,14 +1,16 @@
 // frontend/src/app/lib/api.ts
-export const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+export const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL ?? "/api").replace(/\/+$/, "");
 export const BASE = `${API_ORIGIN}`;
 
 type HeadersInit = Record<string, string>;
-type Opt = { token?: string; params?: Record<string, any>; public?: boolean; headers?: HeadersInit; };
+type Opt = { token?: string; params?: Record<string, any>; public?: boolean; headers?: HeadersInit };
 
 const qs = (p?: Record<string, any>)=>{
     if(!p) return "";
-    const s = new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([,v])=>v!==''&&v!=null))).toString();
-    return s?`?${s}`:"";
+    const s = new URLSearchParams(
+        Object.fromEntries(Object.entries(p).filter(([,v])=>v!==''&&v!=null))
+    ).toString();
+    return s ? `?${s}` : "";
 };
 
 export async function parse<T=any>(res: Response): Promise<T>{
@@ -25,24 +27,36 @@ export async function parse<T=any>(res: Response): Promise<T>{
 
 const norm = (x?: string|Opt): Opt => typeof x==='string'? {token:x} : (x||{});
 
-async function request(method: 'GET'|'POST'|'PUT'|'DELETE', path: string, body?: any, x?: string|Opt){
+async function request(
+    method: 'GET'|'POST'|'PUT'|'DELETE',
+    path: string,
+    body?: any,
+    x?: string|Opt
+){
     const opt = norm(x);
     const url = `${BASE}${path.startsWith('/')?path:`/${path}`}${qs(opt.params)}`;
     const headers: HeadersInit = { Accept: 'application/json', ...(opt.headers||{}) };
     const init: RequestInit = { method, headers };
 
     if(body!==undefined){
-        headers['Content-Type']='application/json';
-        init.body = typeof body==='string'? body : JSON.stringify(body);
+        if (body instanceof FormData) {
+            init.body = body; // boundary otomatik
+        } else if (typeof body === 'string') {
+            headers['Content-Type']='application/json';
+            init.body = body;
+        } else {
+            headers['Content-Type']='application/json';
+            init.body = JSON.stringify(body);
+        }
     }
 
     const isPublic = opt.public ?? /(^|\/)public(\/|$)/.test(path);
     if(opt.token) headers['Authorization'] = `Bearer ${opt.token}`;
 
-    // PROXY sayesinde origin aynı; yine de cookie gerekecekse include.
+    // Origin aynı; cookie gerekirse include.
     init.credentials = isPublic ? 'omit' : 'include';
 
-    return fetch(url, init);
+    return fetch(url, init); // Response döndürür; parse için api.json kullan
 }
 
 export const api = {

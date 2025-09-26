@@ -1,7 +1,9 @@
+// app/dashboard/.../PassengerOverview.tsx  (adı sizde farklıysa aynı içerikle değiştirin)
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/app/lib/api';
+import { BASE } from '@/app/lib/api';
 import { myAppHook } from '../../../../context/AppProvider';
 import { fmtTR } from '@/app/lib/datetime';
 
@@ -40,6 +42,7 @@ type ApiErr = { message?:string; errors?:Record<string, string[]|string> };
 const TRYc = new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:2});
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL||'').replace(/\/+$/,'');
 
+// URL’yi göreli path’e çevir
 const toPath = (u?:string|null)=>{
     if(!u) return null;
     if(u.startsWith('/')) return u;
@@ -47,6 +50,7 @@ const toPath = (u?:string|null)=>{
     catch{ return (API_BASE && u.startsWith(API_BASE)) ? u.slice(API_BASE.length) : u; }
 };
 
+// API sayfa payload’unu normalize et
 function pickRows<T=any>(raw:any): { rows:T[]; total:number; next:string|null; prev:string|null }{
     if(!raw) return { rows:[], total:0, next:null, prev:null };
     if(Array.isArray(raw)) return { rows:raw, total:raw.length, next:null, prev:null };
@@ -57,20 +61,50 @@ function pickRows<T=any>(raw:any): { rows:T[]; total:number; next:string|null; p
         const total = Number(raw.total ?? raw?.meta?.total ?? raw.data.length);
         return { rows: raw.data, total, next, prev };
     }
-
     if(Array.isArray(raw.orders)){
         const next = raw.next_page_url ?? null;
         const prev = raw.prev_page_url ?? null;
         const total = Number(raw.total ?? raw.orders.length);
         return { rows: raw.orders, total, next, prev };
     }
-
     return { rows:[], total:0, next:null, prev:null };
 }
 
 const clamp = (n:number,min:number,max:number)=> Math.max(min, Math.min(max, n));
 
-/* ------------ Bileşen ------------ */
+/* ---------- CSV yardımcıları: Sunucu (POST /company/export/array) + İstemci fallback ---------- */
+// Hücre kaçışı
+const csvEscape = (v:any)=>{ const s = String(v ?? ''); return /[",;\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; };
+// CSV metnini üret (Excel uyumlu BOM + ; ayraç)
+const buildCsv = (headers:string[], rows:(string|number)[][])=>{
+    const bom = '\uFEFF';
+    const head = headers.length ? headers.map(csvEscape).join(';')+'\n' : '';
+    const body = rows.map(r=> r.map(csvEscape).join(';')).join('\n');
+    return bom + head + body + (body?'\n':'');
+};
+// İstemci tarafı indirme
+const downloadText = (filename:string, text:string)=>{
+    const blob = new Blob([text], { type:'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+};
+// Sunucu dene, olmazsa fallback’e düş
+const saveCsv = async (filename:string, headers:string[], rows:(string|number)[][], token?:string)=>{
+    try{
+        const res = await fetch(`${BASE}/company/export/array`,{
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) },
+            body: JSON.stringify({ filename, headings: headers, rows }),
+        });
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    }catch{
+        downloadText(filename, buildCsv(headers, rows));
+    }
+};
+
 export default function PassengerOverview() {
     const { isLoading, token } = (myAppHook() as any) || {};
 
@@ -117,7 +151,7 @@ export default function PassengerOverview() {
         })();
     }, [isLoading, token, perPage]);
 
-    // Sayfalı liste
+    // Sayfalı liste (arka plan cache’i)
     const load = async (url?: string) => {
         if (isLoading || !token) return;
         setLoadingPage(true); setErr(''); setBanner('');
@@ -134,43 +168,61 @@ export default function PassengerOverview() {
             setLoadingPage(false);
         }
     };
-
     useEffect(() => { if (!isLoading && token) void load(); }, [isLoading, token, perPage]);
 
-    // Tüm siparişleri CSV
+    // ---- CSV: Tüm siparişler (sayfalı) ----
     const exportAllCSV = async () => {
         if(!token) return;
         try{
-            let url: string | null = `/orders?per_page=100`;
+            let url: string | null = `/orders?per_page=200`;
             const all: Order[] = [];
-            for(let i=0;i<100;i++){
+            for(let i=0;i<200;i++){
                 const data = await getJSON<any>(url);
                 const { rows, next } = pickRows<Order>(data);
                 all.push(...rows);
                 url = toPath(next||'');
                 if(!url) break;
             }
-            const cols = [
-                { key: 'pnr', title: 'PNR' },
-                { key: 'Sefer', title: 'Sefer', map: (o: Order) => o.product?.trip ?? '' },
-                { key: 'Güzergah', title: 'Güzergah', map: (o: Order) => `${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}` },
-                { key: 'Kalkış', title: 'Kalkış', map: (o: Order) => fmtTR(o.product?.departure_time)},
-                { key: 'qty', title: 'Adet' },
-                { key: 'unit_price', title: 'Birim' },
-                { key: 'total', title: 'Toplam' },
-                { key: 'Sipariş Tarihi', title: 'Sipariş Tarihi', map: (o: Order) => fmtTR(o.created_at)},
-            ];
+            await saveCsv(
+                'siparisler_hepsi.csv',
+                ['PNR','Sefer','Güzergah','Kalkış','Adet','Birim','Toplam','Sipariş Tarihi'],
+                all.map(o=>[
+                    o.pnr,
+                    (o.product?.trip ?? ''),
+                    `${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}`,
+                    fmtTR(o.product?.departure_time),
+                    o.qty,
+                    Number(o.unit_price||0),
+                    Number(o.total||0),
+                    fmtTR(o.created_at),
+                ]),
+                token
+            );
+            setBanner(`Dışa aktarıldı: ${all.length} kayıt.`);
         }catch(e:any){
             const p:ApiErr|undefined = e?.response?.data;
             alert(p?.message || e?.message || 'Dışa aktarma hatası');
         }
     };
 
+    // ---- CSV: Son 5 sipariş (kart) ----
+    const exportLatestCSV = async ()=>{
+        await saveCsv(
+            'son_5_siparis.csv',
+            ['PNR','Sefer','Güzergah','Kalkış','Adet','Birim','Toplam','Tarih'],
+            latest.map(o=>[
+                o.pnr,
+                (o.product?.trip ?? ''),
+                `${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}`,
+                fmtTR(o.product?.departure_time),
+                o.qty, Number(o.unit_price||0), Number(o.total||0), fmtTR(o.created_at)
+            ]),
+            token
+        );
+    };
+
     if (isLoading) return <div className="p-6">Yükleniyor…</div>;
     if (!token) return <div className="p-6">Giriş yapın.</div>;
-
-    const latestRows = latest;
-    const { rows:pageRows, total, next, prev } = pickRows<Order>(page as any);
 
     return (
         <div className="space-y-6 text-indigo-900">
@@ -182,15 +234,18 @@ export default function PassengerOverview() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Card title="Toplam Sipariş" value={summary.orders} />
                 <Card title="Toplam Harcama" value={currency.format(summary.spent)} />
+                {/* Export kartı */}
                 <div className="rounded-2xl border bg-white p-4 flex items-end justify-between">
                     <div>
                         <div className="text-xs text-indigo-900/60">Dışa Aktarım</div>
                         <div className="text-sm text-indigo-900/80 mt-1">Tüm siparişlerin tamamı</div>
                     </div>
-
+                    <div className="flex gap-2">
+                        <button className="px-3 py-1 rounded-lg border" onClick={exportLatestCSV}>Son 5 CSV</button>
+                        <button className="px-3 py-1 rounded-lg border" onClick={exportAllCSV}>Hepsi CSV</button>
+                    </div>
                 </div>
             </div>
-
         </div>
     );
 }

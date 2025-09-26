@@ -12,16 +12,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // ALIASES
         $middleware->alias([
-            'admin' => \App\Http\Middleware\AdminOnly::class,
             'personnel.active' => \App\Http\Middleware\PersonnelActive::class,
-            'admin.only'      => \App\Http\Middleware\AdminOnly::class,
-            'Company.approver'=> \App\Http\Middleware\CompanyApprover::class,
+
+            'admin.only'       => \App\Http\Middleware\AdminOnly::class,
+            'admin'            => \App\Http\Middleware\AdminOnly::class,
+
+            'company.approver' => \App\Http\Middleware\CompanyApprover::class,
 
         ]);
-
-        // (opsiyonel) grup eklemiyorsan başka ayar gerekmez
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -2,7 +2,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { myAppHook } from '../../../../../../context/AppProvider';
-import { api } from '@/app/lib/api';
+import { api, BASE } from '@/app/lib/api'; // <-- BASE eklendi
 
 type Row = {
     id:number;
@@ -36,9 +36,54 @@ export default function Page(){
 
     const act = async (id:number,kind:'approve'|'reject')=>{
         setErr(''); setBanner('');
-        try{ await api.post(`/company/approvals/${id}/${kind}`,{}, { token }); setBanner(kind==='approve'?'Firma onayı verildi.':'Firma reddetti.'); await fetchRows(); }
-        catch(e:any){ setErr(e?.response?.data?.message||'İşlem hatası'); }
+        try{
+            await api.post(`/company/approvals/${id}/${kind}`,{}, { token });
+            setBanner(kind==='approve'?'Firma onayı verildi.':'Firma reddetti.');
+            await fetchRows();
+        }catch(e:any){ setErr(e?.response?.data?.message||'İşlem hatası'); }
     };
+
+    // --- CSV helpers (yalnızca eklendi) ---
+    const saveCsv = async (filename:string, headings:string[], rows:(string|number)[][])=>{
+        const res = await fetch(`${BASE}/company/export/array`,{
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) },
+            body: JSON.stringify({ filename, headings, rows }),
+        });
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(a.href);
+    };
+
+    const exportVisible = async ()=>{
+        const headings = ['ID','Ad','E-posta','Firma','Firma Onayı','Admin Onayı','Başvuru'];
+        const rowsCsv = filtered.map(r=>[
+            r.user?.id ?? '', r.user?.name ?? '-', r.user?.email ?? '-',
+            r.company?.name ?? '-', r.company_status, r.admin_status, r.created_at
+        ]);
+        await saveCsv('personel_onaylari.csv', headings, rowsCsv);
+    };
+    const exportAll = async ()=>{
+        const headings = ['ID','Ad','E-posta','Firma','Firma Onayı','Admin Onayı','Başvuru'];
+        const rowsCsv = filtered.map(r=>[
+            r.user?.id ?? '', r.user?.name ?? '-', r.user?.email ?? '-',
+            r.company?.name ?? '-', r.company_status, r.admin_status, r.created_at
+        ]);
+        await saveCsv('tum.csv', headings, rowsCsv);
+    };
+
+    const exportOne = async (r:Row)=>{
+        const headings = ['ID','Ad','E-posta','Firma','Firma Onayı','Admin Onayı','Başvuru'];
+        const row = [[
+            r.user?.id ?? '', r.user?.name ?? '-', r.user?.email ?? '-',
+            r.company?.name ?? '-', r.company_status, r.admin_status, r.created_at
+        ]];
+        await saveCsv(`onay_${r.id}.csv`, headings, row);
+    };
+    // --- CSV helpers son ---
 
     return (
         <div className="space-y-4 text-indigo-900/70">
@@ -47,6 +92,8 @@ export default function Page(){
                 <div className="flex gap-2">
                     <input className="w-64 rounded-xl border px-3 py-2" placeholder="Ara" value={q} onChange={e=>setQ(e.target.value)} />
                     <button className="rounded-xl border px-3 py-2" onClick={fetchRows} disabled={loading}>Yenile</button>
+                    <button className="rounded-xl border px-3 py-2" onClick={exportVisible}>Sayfa CSV</button>{/* <-- eklendi */}
+                    <button className="rounded-xl border px-3 py-2" onClick={exportAll}>Tüm CSV</button>{/* <-- eklendi */}
                 </div>
             </div>
             {banner && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{banner}</div>}
@@ -55,12 +102,15 @@ export default function Page(){
             <div className="rounded-2xl border bg-white p-4 overflow-x-auto">
                 <table className="min-w-[800px] w-full text-sm">
                     <thead><tr className="text-left text-indigo-900/60">
-                        <th className="py-2">Ad</th><th>E-posta</th><th>Firma</th><th>Firma Onayı</th><th>Admin Onayı</th><th className="text-right">İşlem</th>
+                        <th className="py-2">ID</th><th className="py-2">Ad</th><th>E-posta</th><th>Firma</th><th>Firma Onayı</th><th>Admin Onayı</th><th className="text-right">İşlem</th>
                     </tr></thead>
                     <tbody>
                     {filtered.map(r=>(
                         <tr key={r.id} className="border-t">
-                            <td className="py-2">{r.user?.name}</td><td>{r.user?.email}</td><td>{r.company?.name||'-'}</td>
+                            <td className="py-2">{r.user?.id}</td>
+                            <td className="py-2">{r.user?.name}</td>
+                            <td>{r.user?.email}</td>
+                            <td>{r.company?.name||'-'}</td>
                             <td>
                 <span className={`inline-flex rounded-lg px-2 py-0.5 text-xs border ${
                     r.company_status==='approved'?'bg-emerald-50 text-emerald-700 border-emerald-200':
@@ -72,10 +122,11 @@ export default function Page(){
                             <td className="text-right space-x-2">
                                 <button className="px-2 py-1 rounded-lg border disabled:opacity-50" disabled={r.company_status!=='pending'} onClick={()=>act(r.id,'approve')}>Onayla</button>
                                 <button className="px-2 py-1 rounded-lg border disabled:opacity-50" disabled={r.company_status!=='pending'} onClick={()=>act(r.id,'reject')}>Reddet</button>
+                                <button className="px-2 py-1 rounded-lg border" onClick={()=>exportOne(r)}>CSV</button>{/* <-- satır CSV */}
                             </td>
                         </tr>
                     ))}
-                    {!filtered.length && <tr><td colSpan={6} className="py-6 text-center text-indigo-900/50">Kayıt yok</td></tr>}
+                    {!filtered.length && <tr><td colSpan={7} className="py-6 text-center text-indigo-900/50">Kayıt yok</td></tr>}
                     </tbody>
                 </table>
             </div>

@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { myAppHook } from "../../../context/AppProvider";
 import { Bus, Eye, EyeOff } from "lucide-react";
 import { BASE } from "./../lib/api";
-
 type Role = "passenger" | "personnel";
 type FormData = {
     name?: string;

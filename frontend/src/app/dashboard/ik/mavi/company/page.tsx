@@ -13,7 +13,7 @@ export default function CompanyInfo(){
     if (err) return <div className="p-6 text-red-700">{err}</div>;
     if (!d) return <div className="p-6">Yükleniyor…</div>;
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 text-indigo-900">
             <h1 className="text-2xl font-bold text-indigo-900">Firmam</h1>
             <div className="rounded-2xl border bg-white p-4">
                 <div className="grid sm:grid-cols-2 gap-4 text-sm">

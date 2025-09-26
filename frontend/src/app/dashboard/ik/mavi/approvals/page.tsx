@@ -2,7 +2,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { myAppHook } from '../../../../../../context/AppProvider';
-import { api } from '@/app/lib/api';
+import { api, BASE } from '@/app/lib/api';
 
 type Row = {
     id:number;
@@ -35,7 +35,6 @@ export default function ApprovalsPage(){
         }catch(e:any){ setErr(e?.response?.data?.message || 'Liste alınamadı.'); }
         finally{ setLoading(false); }
     };
-
     useEffect(()=>{ if(!isLoading && token && isMavi) fetchRows(); },[isLoading,token,isMavi]);
 
     const filtered = useMemo(()=>{
@@ -53,6 +52,35 @@ export default function ApprovalsPage(){
         }catch(e:any){ setErr(e?.response?.data?.message || 'İşlem hatası'); }
     };
 
+    // --- CSV helpers
+    const saveCsv = async (filename:string, headings:string[], rows:(string|number)[][])=>{
+        const res = await fetch(`${BASE}/company/export/array`,{
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) },
+            body: JSON.stringify({ filename, headings, rows }),
+        });
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    };
+    const exportPageCsv = async ()=>{
+        await saveCsv('approvals.csv',
+            ['ID','Ad','E-posta','Firma','Firma Onayı','Admin Onayı','Başvuru'],
+            filtered.map(r=>[
+                r.user?.id ?? '-', r.user?.name||'-', r.user?.email||'-',
+                r.company?.name||'-', r.company_status, r.admin_status, r.created_at
+            ])
+        );
+    };
+    const exportOneCsv = async (r:Row)=>{
+        await saveCsv(`approval_${r.id}.csv`,
+            ['ID','Ad','E-posta','Firma','Firma Onayı','Admin Onayı','Başvuru'],
+            [[ r.user?.id ?? '-', r.user?.name||'-', r.user?.email||'-', r.company?.name||'-', r.company_status, r.admin_status, r.created_at ]]
+        );
+    };
+    // --- CSV end
+
     if (isLoading) return <div className="p-6">Yükleniyor…</div>;
     if (!token) return <div className="p-6">Giriş yapın.</div>;
     if (!isMavi) return <div className="p-6">Bu sayfa Mavi içindir.</div>;
@@ -63,6 +91,7 @@ export default function ApprovalsPage(){
                 <h1 className="text-2xl font-bold">Personel Onayları</h1>
                 <div className="flex gap-2">
                     <input className="w-64 rounded-xl border px-3 py-2" placeholder="Ara" value={q} onChange={e=>setQ(e.target.value)} />
+                    <button className="rounded-xl border px-3 py-2" onClick={exportPageCsv}>Sayfa CSV</button>
                     <button className="rounded-xl border px-3 py-2" onClick={fetchRows} disabled={loading}>Yenile</button>
                 </div>
             </div>
@@ -70,15 +99,17 @@ export default function ApprovalsPage(){
             {err &&    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
 
             <div className="rounded-2xl border bg-white p-4 overflow-x-auto">
-                <table className="min-w-[800px] w-full text-sm">
+                <table className="min-w-[900px] w-full text-sm">
                     <thead>
                     <tr className="text-left text-indigo-900/60">
-                        <th className="py-2">Ad</th><th>E-posta</th><th>Firma</th><th>Firma Onayı</th><th>Admin Onayı</th><th className="text-right">İşlem</th>
+                        <th className="py-2">ID</th>
+                        <th className="py-2">Ad</th><th>E-posta</th><th>Firma</th><th>Firma Onayı</th><th>Admin Onayı</th><th className="text-right">İşlem</th><th className="text-right">CSV</th>
                     </tr>
                     </thead>
                     <tbody>
                     {filtered.map(r=>(
                         <tr key={r.id} className="border-t">
+                            <td className="py-2">{r.user?.id ?? '-'}</td>
                             <td className="py-2">{r.user?.name}</td>
                             <td>{r.user?.email}</td>
                             <td>{r.company?.name || '-'}</td>
@@ -91,14 +122,15 @@ export default function ApprovalsPage(){
                             </td>
                             <td>{r.admin_status}</td>
                             <td className="text-right space-x-2">
-                                <button className="px-2 py-1 rounded-lg border disabled:opacity-50"
-                                        disabled={r.company_status!=='pending'} onClick={()=>act(r.id,'approve')}>Onayla</button>
-                                <button className="px-2 py-1 rounded-lg border disabled:opacity-50"
-                                        disabled={r.company_status!=='pending'} onClick={()=>act(r.id,'reject')}>Reddet</button>
+                                <button className="px-2 py-1 rounded-lg border disabled:opacity-50" disabled={r.company_status!=='pending'} onClick={()=>act(r.id,'approve')}>Onayla</button>
+                                <button className="px-2 py-1 rounded-lg border disabled:opacity-50" disabled={r.company_status!=='pending'} onClick={()=>act(r.id,'reject')}>Reddet</button>
+                            </td>
+                            <td className="text-right">
+                                <button className="px-2 py-1 rounded-lg border" onClick={()=>exportOneCsv(r)}>CSV</button>
                             </td>
                         </tr>
                     ))}
-                    {!filtered.length && <tr><td colSpan={6} className="py-6 text-center text-indigo-900/50">Kayıt yok</td></tr>}
+                    {!filtered.length && <tr><td colSpan={8} className="py-6 text-center text-indigo-900/50">Kayıt yok</td></tr>}
                     </tbody>
                 </table>
             </div>

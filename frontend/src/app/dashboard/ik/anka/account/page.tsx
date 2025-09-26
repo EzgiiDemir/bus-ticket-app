@@ -5,7 +5,7 @@ import { myAppHook } from '../../../../../../context/AppProvider';
 export default function Page(){
     const { user } = myAppHook() as any;
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 text-indigo-900/70">
             <h1 className="text-2xl font-bold text-indigo-900">Hesabım</h1>
             <div className="rounded-2xl border bg-white p-4 text-sm">
                 <div className="grid sm:grid-cols-2 gap-4">

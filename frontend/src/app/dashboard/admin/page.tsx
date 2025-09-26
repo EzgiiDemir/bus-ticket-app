@@ -2,35 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { myAppHook } from "../../../../context/AppProvider";
+import { BASE } from "@/app/lib/api";
 import {
-    ResponsiveContainer,
-    LineChart,
-    Line,
-    XAxis,
-    YAxis,
-    Tooltip,
-    CartesianGrid,
-    Legend,
-    BarChart,
-    Bar,
-} from "recharts";
-import { fmtTR } from "../../../lib/datetime";
-import { exportCSV, exportJSON } from "@/app/lib/export";
-import {
-    getAdminOverview,
-    getRevenueSeries,
-    getCompanyBreakdown,
-    getTopRoutes,
+    getAdminOverview, getRevenueSeries, getCompanyBreakdown, getTopRoutes,
 } from "../../../lib/adminApi";
+import {
+    ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
+    CartesianGrid, Legend, BarChart, Bar,
+} from "recharts";
 
-/* ---- Tipler ---- */
+/* ---------- Tipler ---------- */
 type Totals = {
-    orders: number;
-    revenue: number;
-    active_trips: number;
-    upcoming: number;
-    personnel: number;
-    customers: number;
+    orders: number; revenue: number; active_trips: number; upcoming: number; personnel: number; customers: number;
 };
 type SeriesItem = { d: string; revenue: number };
 type BreakdownItem = { name: string; revenue: number; orders: number };
@@ -49,12 +32,85 @@ export default function AdminOverviewPage() {
     const [err, setErr] = useState<string>("");
     const [banner, setBanner] = useState<string>("");
 
-    /* ---- Yardımcılar ---- */
+    /* ================= CSV: Sunucu → İstemci fallback =================
+       - Önce /company/export/array'a POST dener.
+       - Hata olursa istemcide CSV metnini üretip indirir.
+       - Ayırıcı ;, UTF-8 BOM: Excel/TR uyumlu
+    =================================================================== */
+    const csvEscape = (v: any) => {
+        const s = String(v ?? "");
+        return /[\";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const buildCsv = (headings: string[], rows: (string | number)[][]) => {
+        const bom = "\uFEFF";
+        const head = headings.length ? headings.map(csvEscape).join(";") + "\n" : "";
+        const body = rows.map(r => r.map(csvEscape).join(";")).join("\n");
+        return bom + head + body + (body ? "\n" : "");
+    };
+    const downloadText = (filename: string, text: string) => {
+        const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+    };
+    const saveCsv = async (filename: string, headings: string[], rows: (string | number)[][]) => {
+        try {
+            const res = await fetch(`${BASE}/company/export/array`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ filename, headings, rows }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+        } catch {
+            downloadText(filename, buildCsv(headings, rows));
+        }
+    };
+
+    /* ---------- CSV export butonları (üst) ---------- */
+    const exportTotals = () => saveCsv(
+        "genel_ozet.csv",
+        ["Sipariş", "Gelir", "Aktif Sefer", "Yaklaşan", "Personel", "Müşteri"],
+        [[totals?.orders ?? 0, totals?.revenue ?? 0, totals?.active_trips ?? 0, totals?.upcoming ?? 0, totals?.personnel ?? 0, totals?.customers ?? 0]],
+    );
+    const exportSeries = () => saveCsv(
+        "gelir_serisi_30g.csv",
+        ["#", "Tarih", "Gelir"],
+        series.map((x, i) => [i + 1, x.d, x.revenue]),
+    );
+    const exportBreakdown = () => saveCsv(
+        "sirket_kirilimi.csv",
+        ["#", "Ad", "Gelir", "Sipariş"],
+        breakdown.map((x, i) => [i + 1, x.name, x.revenue, x.orders]),
+    );
+    const exportRoutes = () => saveCsv(
+        "en_cok_satan_guzergahlar.csv",
+        ["#", "Güzergah", "Koltuk", "Gelir"],
+        routes.map((r, i) => [i + 1, `${r.terminal_from} → ${r.terminal_to}`, r.seats, r.revenue]),
+    );
+    // Tablo HER SATIR CSV: yalnızca güzergâh tablosunda satır var
+    const exportRouteRow = (idx: number, r: RouteItem) => saveCsv(
+        `guzergah_${idx + 1}.csv`,
+        ["#", "Güzergah", "Koltuk", "Gelir"],
+        [[idx + 1, `${r.terminal_from} → ${r.terminal_to}`, r.seats, r.revenue]],
+    );
+
+    /* ---------- Sayısal normalizasyon ---------- */
     const parseNumber = (v: any) => {
         if (typeof v === "number") return v;
         if (v === null || v === undefined || v === "") return 0;
         if (typeof v === "string") {
-            // "1.234,56" -> "1234.56", or "1234.56"
             const s = v.replace(/\./g, "").replace(",", ".");
             const n = Number(s);
             return Number.isFinite(n) ? n : 0;
@@ -62,42 +118,22 @@ export default function AdminOverviewPage() {
         const n = Number(v);
         return Number.isFinite(n) ? n : 0;
     };
-
-    /**
-     * Normalize money values that may come from backend as:
-     *  - number in TL (e.g. 400)
-     *  - number in kuruş / cents (e.g. 40000)
-     *  - formatted string "40.000,00" or "40000" or "400.00"
-     *
-     * Heuristics: if parsed number >= 1000 and looks like multiple of 100, divide by 100.
-     */
+    // TL kuruş/format heuristics
     const normalizeMoney = (v: any) => {
         const n = parseNumber(v);
         if (n === 0) return 0;
-        // If value looks like kuruş (e.g. 40000 -> 400.00) and is integer multiple of 100
-        if (n >= 1000 && Math.abs(n % 100) === 0) {
-            return n / 100;
-        }
-        return n;
+        return n >= 1000 && Math.abs(n % 100) === 0 ? n / 100 : n;
     };
 
-    const TRYc = new Intl.NumberFormat("tr-TR", {
-        style: "currency",
-        currency: "TRY",
-        maximumFractionDigits: 2,
-    });
+    const TRYc = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 2 });
     const fmtTL = (n: any) => TRYc.format(Number(n || 0));
 
+    /* ---------- Veri çekme ---------- */
     const refresh = async () => {
-        setLoading(true);
-        setErr("");
-        setBanner("");
+        setLoading(true); setErr(""); setBanner("");
         try {
             const [t, s, b, r] = await Promise.all([
-                getAdminOverview(),
-                getRevenueSeries(30),
-                getCompanyBreakdown(),
-                getTopRoutes(),
+                getAdminOverview(), getRevenueSeries(30), getCompanyBreakdown(), getTopRoutes(),
             ]);
 
             // Totals
@@ -110,22 +146,18 @@ export default function AdminOverviewPage() {
                     personnel: parseNumber((t as any).personnel),
                     customers: parseNumber((t as any).customers),
                 });
-            } else {
-                setTotals(null);
-            }
+            } else setTotals(null);
 
-            // Series
-            setSeries(((s || []) as any[]).map((x) => ({ d: String(x.d), revenue: normalizeMoney(x.revenue) })));
+            // Series (son 30 gün)
+            setSeries(((s || []) as any[]).map(x => ({ d: String(x.d), revenue: normalizeMoney(x.revenue) })));
 
-            // Breakdown
-            setBreakdown(((b || []) as any[]).map((x) => ({
-                name: String(x.name ?? ""),
-                revenue: normalizeMoney(x.revenue),
-                orders: parseNumber(x.orders),
+            // Şirket kırılımı
+            setBreakdown(((b || []) as any[]).map(x => ({
+                name: String(x.name ?? ""), revenue: normalizeMoney(x.revenue), orders: parseNumber(x.orders),
             })));
 
-            // Routes
-            setRoutes(((r || []) as any[]).map((x) => ({
+            // Güzergâhlar
+            setRoutes(((r || []) as any[]).map(x => ({
                 terminal_from: String(x.terminal_from ?? ""),
                 terminal_to: String(x.terminal_to ?? ""),
                 seats: parseNumber(x.seats),
@@ -161,51 +193,19 @@ export default function AdminOverviewPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold text-indigo-900">Genel Bakış</h1>
                 <div className="flex gap-2">
-                    <button
-                        className="px-3 py-1 rounded-lg border disabled:opacity-50"
-                        onClick={() => void refresh()}
-                        disabled={loading}
-                        aria-label="Yenile"
-                    >
-                        Yenile
-                    </button>
+                    <button className="px-3 py-1 rounded-lg border disabled:opacity-50" onClick={()=>void refresh()} disabled={loading}>Yenile</button>
+                    <button className="px-3 py-1 rounded-lg border" onClick={exportTotals}>Özet CSV</button>
                 </div>
             </div>
 
             {/* Bannerlar */}
             {banner && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{banner}</div>}
-            {err && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
+            {err &&    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
 
-            {/* KPI kartları + export */}
+            {/* KPI kartları */}
             <div className="rounded-2xl border bg-white p-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h2 className="font-semibold text-indigo-900">Genel Özet</h2>
-                    <div className="flex gap-2">
-                        <button
-                            className="px-3 py-1 rounded-lg border disabled:opacity-50"
-                            disabled={!totals}
-                            onClick={() => {
-                                if (!totals) return;
-                                exportCSV(
-                                    "admin_ozet",
-                                    [totals],
-                                    [
-                                        { key: "orders", title: "Toplam Sipariş" },
-                                        { key: "revenue", title: "Toplam Gelir" },
-                                        { key: "active_trips", title: "Aktif Sefer" },
-                                        { key: "upcoming", title: "Yaklaşan" },
-                                        { key: "personnel", title: "Personel" },
-                                        { key: "customers", title: "Müşteri" },
-                                    ]
-                                );
-                            }}
-                        >
-                            CSV
-                        </button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={!totals} onClick={() => totals && exportJSON("admin_ozet", totals)}>
-                            JSON
-                        </button>
-                    </div>
                 </div>
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     <Card title="Toplam Sipariş" value={totals?.orders ?? 0} />
@@ -217,42 +217,22 @@ export default function AdminOverviewPage() {
                 </div>
             </div>
 
-            {/* Gelir grafiği + export */}
+            {/* Gelir grafiği (Son 30 gün) + CSV */}
             <div className="rounded-2xl border bg-white p-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h3 className="font-semibold text-indigo-900">Gelir (Son 30 gün)</h3>
-                    <div className="flex gap-2">
-                        <button
-                            className="px-3 py-1 rounded-lg border disabled:opacity-50"
-                            disabled={!series.length}
-                            onClick={() => {
-                                exportCSV(
-                                    "gelir_son30gun",
-                                    series,
-                                    [
-                                        { key: "name", title: "Şirket" },
-                                        { key: "revenue", title: "Gelir" },
-                                    ]
-                                );
-                            }}
-                        >
-                            CSV
-                        </button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={!series.length} onClick={() => exportJSON("gelir_son30gun", series)}>
-                            JSON
-                        </button>
-                    </div>
+                    <button className="px-3 py-1 rounded-lg border" onClick={exportSeries}>CSV</button>
                 </div>
                 <div className="h-72 mt-2">
-                    {breakdown.length ? (
+                    {series.length ? (
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={breakdown}>
+                            <LineChart data={series}>
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" />
+                                <XAxis dataKey="d" />
                                 <YAxis />
                                 <Tooltip />
                                 <Legend />
-                                <Bar dataKey="revenue" />
+                                <Line type="monotone" dataKey="revenue" />
                             </LineChart>
                         </ResponsiveContainer>
                     ) : (
@@ -261,32 +241,11 @@ export default function AdminOverviewPage() {
                 </div>
             </div>
 
-            {/* Şirket kırılımı + export */}
+            {/* Şirket kırılımı + CSV */}
             <div className="rounded-2xl border bg-white p-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h3 className="font-semibold text-indigo-900">Şirket Kırılımı</h3>
-                    <div className="flex gap-2">
-                        <button
-                            className="px-3 py-1 rounded-lg border disabled:opacity-50"
-                            disabled={!breakdown.length}
-                            onClick={() => {
-                                exportCSV(
-                                    "sirket_kirilimi",
-                                    breakdown,
-                                    [
-                                        { key: "name", title: "Şirket" },
-                                        { key: "revenue", title: "Gelir" },
-                                        { key: "orders", title: "Sipariş" },
-                                    ]
-                                );
-                            }}
-                        >
-                            CSV
-                        </button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={!breakdown.length} onClick={() => exportJSON("sirket_kirilimi", breakdown)}>
-                            JSON
-                        </button>
-                    </div>
+                    <button className="px-3 py-1 rounded-lg border" onClick={exportBreakdown}>CSV</button>
                 </div>
                 <div className="h-72 mt-2">
                     {breakdown.length ? (
@@ -307,56 +266,36 @@ export default function AdminOverviewPage() {
                 </div>
             </div>
 
-            {/* Güzergahlar tablosu + export */}
+            {/* Güzergahlar tablosu + CSV */}
             <div className="rounded-2xl border bg-white p-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h3 className="font-semibold text-indigo-900">En Çok Satılan Güzergahlar</h3>
-                    <div className="flex gap-2">
-                        <button
-                            className="px-3 py-1 rounded-lg border disabled:opacity-50"
-                            disabled={!routes.length}
-                            onClick={() => {
-                                exportCSV(
-                                    "en_cok_satan_guzergahlar",
-                                    routes,
-                                    [
-                                        { key: "terminal_from", title: "Kalkış" },
-                                        { key: "terminal_to", title: "Varış" },
-                                        { key: "seats", title: "Koltuk" },
-                                        { key: "revenue", title: "Gelir" },
-                                    ]
-                                );
-                            }}
-                        >
-                            CSV
-                        </button>
-                        <button className="px-3 py-1 rounded-lg border disabled:opacity-50" disabled={!routes.length} onClick={() => exportJSON("en_cok_satan_guzergahlar", routes)}>
-                            JSON
-                        </button>
-                    </div>
+                    <button className="px-3 py-1 rounded-lg border" onClick={exportRoutes}>Sayfa CSV</button>
                 </div>
                 <div className="overflow-x-auto mt-2">
-                    <table className="min-w-[720px] w-full text-sm">
+                    <table className="min-w-[880px] w-full text-sm">
                         <thead>
                         <tr className="text-left text-indigo-900/60">
-                            <th className="py-2">Güzergah</th>
+                            <th className="py-2">ID</th>
+                            <th>Güzergah</th>
                             <th>Koltuk</th>
                             <th>Gelir</th>
+                            <th className="text-right">CSV</th> {/* HER SATIR İÇİN */}
                         </tr>
                         </thead>
                         <tbody>
-                        {routes.length ? (
-                            routes.map((r, i) => (
-                                <tr key={`${r.terminal_from}-${r.terminal_to}-${i}`} className="border-t">
-                                    <td className="py-2">{r.terminal_from} → {r.terminal_to}</td>
-                                    <td>{r.seats}</td>
-                                    <td>{fmtTL(r.revenue)}</td>
-                                </tr>
-                            ))
-                        ) : (
-                            <tr>
-                                <td colSpan={3} className="py-6 text-center text-indigo-900/50">{loading ? "Yükleniyor…" : "Kayıt yok"}</td>
+                        {routes.length ? routes.map((r, i) => (
+                            <tr key={`${r.terminal_from}-${r.terminal_to}-${i}`} className="border-t">
+                                <td className="py-2">{i + 1}</td>
+                                <td>{r.terminal_from} → {r.terminal_to}</td>
+                                <td>{r.seats}</td>
+                                <td>{fmtTL(r.revenue)}</td>
+                                <td className="text-right">
+                                    <button className="px-2 py-1 rounded-lg border" onClick={()=>exportRouteRow(i, r)}>CSV</button>
+                                </td>
                             </tr>
+                        )) : (
+                            <tr><td colSpan={5} className="py-6 text-center text-indigo-900/50">{loading ? "Yükleniyor…" : "Kayıt yok"}</td></tr>
                         )}
                         </tbody>
                     </table>

@@ -1,7 +1,9 @@
+// app/dashboard/.../orders/page.tsx  (ikinci verdiğin sayfa – “Siparişlerim” tablo + pasajer detay)
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/app/lib/api';
+import { BASE } from '@/app/lib/api';
 import { myAppHook } from '../../../../../context/AppProvider';
 import { fmtTR } from '@/app/lib/datetime';
 
@@ -82,7 +84,6 @@ const seatsJoin = (o:Order) => {
         try { const j = JSON.parse(s); if (Array.isArray(j)) return j.join(', '); } catch {}
         return s;
     }
-    // passengers[]’tan üret
     if (Array.isArray(o.passengers)) return o.passengers.map(p=>p.seat).filter(Boolean).join(', ');
     return '';
 };
@@ -98,7 +99,6 @@ const primaryPassenger = (o:Order) => {
 
 const allPassengersFlat = (o:Order): Passenger[] => {
     if (Array.isArray(o.passengers) && o.passengers.length) return o.passengers;
-    // Tekil alanlardan 1 yolcu üret
     return [{
         seat: Array.isArray(o.seats) ? o.seats[0] : (typeof o.seats==='string' ? o.seats : undefined),
         first_name: o.passenger_name?.split(' ')?.slice(0,-1)?.join(' ') || o.passenger_name || undefined,
@@ -112,6 +112,25 @@ const allPassengersFlat = (o:Order): Passenger[] => {
     }];
 };
 
+/* ---------- CSV yardımcıları: Sunucu + İstemci fallback ---------- */
+const csvEscape = (v:any)=>{ const s=String(v??''); return /[",;\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
+const buildCsv = (h:string[], rows:(string|number)[][])=> '\uFEFF' + (h.length?h.map(csvEscape).join(';')+'\n':'') + rows.map(r=>r.map(csvEscape).join(';')).join('\n');
+const downloadText=(fn:string,txt:string)=>{ const b=new Blob([txt],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=fn; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); };
+const saveCsv = async (filename:string, headers:string[], rows:(string|number)[][], token?:string)=>{
+    try{
+        const res = await fetch(`${BASE}/company/export/array`,{
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) },
+            body: JSON.stringify({ filename, headings: headers, rows }),
+        });
+        if(!res.ok) throw new Error();
+        const blob = await res.blob(); const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    }catch{
+        downloadText(filename, buildCsv(headers, rows));
+    }
+};
+
 /* ---- Page ---- */
 export default function Page(){
     const { token, isLoading } = (myAppHook() as any) || {};
@@ -123,6 +142,7 @@ export default function Page(){
     const [err,setErr] = useState('');
     const [banner,setBanner] = useState('');
 
+    // Listeyi yükle
     const load = async (url?:string) => {
         if(!token) return;
         setLoading(true); setErr(''); setBanner('');
@@ -141,36 +161,43 @@ export default function Page(){
             setLoading(false);
         }
     };
-
     useEffect(()=>{ if(!isLoading && token) load(); },[isLoading, token, perPage]);
 
     const { rows, total, next, prev } = useMemo(()=> pickRows<Order>(items as any), [items]);
 
+    // İstemci arama
     const filtered = useMemo(()=>{
         const s = q.trim().toLowerCase();
         if(!s) return rows;
         return rows.filter(o => JSON.stringify(o).toLowerCase().includes(s));
     },[rows,q]);
 
-    const cols = [
-        { key:'pnr',        title:'PNR' },
-        { key:'trip',       title:'Sefer',         map:(o:Order)=>o.product?.trip ?? '' },
-        { key:'route',      title:'Güzergah',      map:(o:Order)=>`${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}` },
-        { key:'departure',  title:'Kalkış',        map:(o:Order)=>fmtTR(o.product?.departure_time)},
-        { key:'seats',      title:'Koltuklar',     map:(o:Order)=>seatsJoin(o)},
-        { key:'primary',    title:'İlk Yolcu',     map:(o:Order)=>primaryPassenger(o)},
-        { key:'qty',        title:'Adet' },
-        { key:'unit_price', title:'Birim' },
-        { key:'total',      title:'Toplam' },
-        { key:'created_at', title:'Sipariş Tarihi',map:(o:Order)=>fmtTR(o.created_at)},
-    ] as const;
+    // Kolon başlıkları
+    const headers = ['PNR','Sefer','Güzergah','Kalkış','Koltuklar','İlk Yolcu','Adet','Birim','Toplam','Sipariş Tarihi'];
 
+    // CSV: sayfada görünen (filtre sonrası) kayıtlar
+    const exportPageCsv = async ()=>{
+        await saveCsv('siparisler_sayfa.csv', headers, filtered.map(o=>[
+            o.pnr,
+            (o.product?.trip ?? '-'),
+            `${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}`,
+            fmtTR(o.product?.departure_time),
+            seatsJoin(o) || '',
+            primaryPassenger(o),
+            o.qty,
+            Number(o.unit_price||0),
+            Number(o.total||0),
+            fmtTR(o.created_at),
+        ]), token);
+    };
+
+    // CSV: tüm sayfalar (sunucudan dolaş)
     const exportAll = async () => {
         if(!token) return;
         setLoading(true); setErr(''); setBanner('');
         try{
             const out: Order[] = [];
-            let url: string | null = `/orders?per_page=100`;
+            let url: string | null = `/orders?per_page=200`;
             for(let i=0;i<200;i++){
                 const res = await api.get(url, { token });
                 const data = await api.json<any>(res);
@@ -179,16 +206,19 @@ export default function Page(){
                 url = toPath(next||'');
                 if(!url) break;
             }
-            // CSV’ye yolcu kolonları da eklensin
-            const expanded = out.map(o=>{
-                const pax = allPassengersFlat(o);
-                return {
-                    ...o,
-                    seats_csv: seatsJoin(o),
-                    primary_passenger: primaryPassenger(o),
-                    passengers_json: JSON.stringify(pax),
-                };
-            });
+            const rowsCsv = out.map(o=>[
+                o.pnr,
+                (o.product?.trip ?? '-'),
+                `${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}`,
+                fmtTR(o.product?.departure_time),
+                seatsJoin(o) || '',
+                primaryPassenger(o),
+                o.qty,
+                Number(o.unit_price||0),
+                Number(o.total||0),
+                fmtTR(o.created_at),
+            ]);
+            await saveCsv('siparisler_hepsi.csv', headers, rowsCsv, token);
             setBanner(`Dışa aktarıldı: ${out.length} kayıt.`);
         }catch(e:any){
             const p:ApiErr|undefined = e?.response?.data;
@@ -196,6 +226,22 @@ export default function Page(){
         }finally{
             setLoading(false);
         }
+    };
+
+    // CSV: tek satır
+    const exportOne = async (o:Order)=>{
+        await saveCsv(`siparis_${o.id}.csv`, headers, [[
+            o.pnr,
+            (o.product?.trip ?? '-'),
+            `${o.product?.terminal_from ?? ''} → ${o.product?.terminal_to ?? ''}`,
+            fmtTR(o.product?.departure_time),
+            seatsJoin(o) || '',
+            primaryPassenger(o),
+            o.qty,
+            Number(o.unit_price||0),
+            Number(o.total||0),
+            fmtTR(o.created_at),
+        ]], token);
     };
 
     if(isLoading) return <div className="p-6">Yükleniyor…</div>;
@@ -223,6 +269,8 @@ export default function Page(){
                         >
                             {[5,10,20,50,100].map(n=><option key={n} value={n}>{n}/sayfa</option>)}
                         </select>
+                        <button className="px-3 py-2 rounded-lg border" onClick={exportPageCsv}>Sayfa CSV</button>
+                        <button className="px-3 py-2 rounded-lg border" onClick={exportAll}>Tümü CSV</button>
                         <button className="px-3 py-2 rounded-lg border disabled:opacity-50" onClick={()=>load()} disabled={loading}>Yenile</button>
                     </div>
                 </div>
@@ -233,53 +281,118 @@ export default function Page(){
             {err &&    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
 
             {/* Tablo */}
-            <div className="rounded-2xl border bg-white p-4 overflow-x-auto">
-                <table className="min-w-[1100px] w-full text-sm">
-                    <thead>
-                    <tr className="text-left text-indigo-900/60">
-                        <th className="py-2">PNR</th>
-                        <th>Sefer</th>
-                        <th>Güzergah</th>
-                        <th>Kalkış</th>
-                        <th>Koltuklar</th>
-                        <th>İlk Yolcu</th>
-                        <th>Adet</th>
-                        <th>Birim</th>
-                        <th>Toplam</th>
-                        <th>Tarih</th>
-                        <th>Detay</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {filtered.map(o=>(
-                        <tr key={o.id} className="border-t align-top">
-                            <td className="py-2 font-mono">{o.pnr}</td>
-                            <td className="font-medium">{o.product?.trip ?? '-'}</td>
-                            <td>{o.product?.terminal_from} → {o.product?.terminal_to}</td>
-                            <td>{fmtTR(o.product?.departure_time)}</td>
-                            <td>{seatsJoin(o) || '—'}</td>
-                            <td>{primaryPassenger(o)}</td>
-                            <td>{o.qty}</td>
-                            <td>{TRYc.format(Number(o.unit_price||0))}</td>
-                            <td className="font-semibold">{TRYc.format(Number(o.total||0))}</td>
-                            <td>{fmtTR(o.created_at)}</td>
-                            <td className="min-w-[220px]">
-                                <PassengerDetails order={o}/>
-                            </td>
+            {/* --- Responsive Liste --- */}
+            <div className="rounded-2xl border bg-white p-4">
+                {/* Desktop (md+) */}
+                <div className="hidden md:block overflow-x-auto">
+                    <table className="min-w-[1000px] w-full text-sm">
+                        <thead>
+                        <tr className="text-left text-indigo-900/60">
+                            <th className="py-2">PNR</th>
+                            <th>Sefer</th>
+                            <th>Güzergah</th>
+                            <th>Kalkış</th>
+                            <th>Koltuklar</th>
+                            <th>İlk Yolcu</th>
+                            <th>Adet</th>
+                            <th>Birim</th>
+                            <th>Toplam</th>
+                            <th>Tarih</th>
+                            <th>Detay</th>
+                            <th className="text-right">CSV</th>
                         </tr>
+                        </thead>
+                        <tbody>
+                        {filtered.map(o=>(
+                            <tr key={o.id} className="border-t align-top">
+                                <td className="py-2 font-mono">{o.pnr}</td>
+                                <td className="font-medium">{o.product?.trip ?? '-'}</td>
+                                <td>{o.product?.terminal_from} → {o.product?.terminal_to}</td>
+                                <td>{fmtTR(o.product?.departure_time)}</td>
+                                <td>{seatsJoin(o) || '—'}</td>
+                                <td>{primaryPassenger(o)}</td>
+                                <td>{o.qty}</td>
+                                <td>{TRYc.format(Number(o.unit_price||0))}</td>
+                                <td className="font-semibold">{TRYc.format(Number(o.total||0))}</td>
+                                <td>{fmtTR(o.created_at)}</td>
+                                <td className="min-w-[220px]"><PassengerDetails order={o}/></td>
+                                <td className="text-right">
+                                    <button className="px-2 py-1 rounded-lg border" onClick={()=>exportOne(o)}>CSV</button>
+                                </td>
+                            </tr>
+                        ))}
+                        {!filtered.length && (
+                            <tr><td colSpan={12} className="py-6 text-center text-indigo-900/50">{loading?'Yükleniyor…':'Kayıt yok'}</td></tr>
+                        )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Mobile ( < md ) */}
+                <div className="md:hidden space-y-3">
+                    {filtered.map(o=>(
+                        <div key={o.id} className="rounded-xl border p-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="font-semibold truncate">{o.product?.trip ?? '-'}</div>
+                                    <div className="text-xs text-indigo-900/60 break-words font-mono">{o.pnr}</div>
+                                </div>
+                                <button className="px-2 py-1 rounded-lg border shrink-0" onClick={()=>exportOne(o)}>CSV</button>
+                            </div>
+
+                            <div className="mt-2 grid grid-cols-2 gap-y-1 text-sm">
+                                <div className="text-indigo-900/60">Güzergah</div>
+                                <div className="truncate">{o.product?.terminal_from} → {o.product?.terminal_to}</div>
+
+                                <div className="text-indigo-900/60">Kalkış</div>
+                                <div>{fmtTR(o.product?.departure_time)}</div>
+
+                                <div className="text-indigo-900/60">Koltuklar</div>
+                                <div className="truncate">{seatsJoin(o) || '—'}</div>
+
+                                <div className="text-indigo-900/60">İlk Yolcu</div>
+                                <div className="truncate">{primaryPassenger(o)}</div>
+
+                                <div className="text-indigo-900/60">Adet</div>
+                                <div>{o.qty}</div>
+
+                                <div className="text-indigo-900/60">Birim</div>
+                                <div>{TRYc.format(Number(o.unit_price||0))}</div>
+
+                                <div className="text-indigo-900/60">Toplam</div>
+                                <div className="font-semibold">{TRYc.format(Number(o.total||0))}</div>
+
+                                <div className="text-indigo-900/60">Tarih</div>
+                                <div>{fmtTR(o.created_at)}</div>
+                            </div>
+
+                            <div className="mt-2">
+                                {/* Detaylar collapsible */}
+                                <PassengerDetails order={o}/>
+                            </div>
+                        </div>
                     ))}
                     {!filtered.length && (
-                        <tr><td colSpan={11} className="py-6 text-center text-indigo-900/50">{loading?'Yükleniyor…':'Kayıt yok'}</td></tr>
+                        <div className="rounded-xl border p-6 text-center text-indigo-900/50">{loading?'Yükleniyor…':'Kayıt yok'}</div>
                     )}
-                    </tbody>
-                </table>
+                </div>
 
                 {/* Pager */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between mt-3">
                     <div className="text-sm text-indigo-900/60">Toplam {total} kayıt</div>
                     <div className="flex gap-2">
-                        <button disabled={!prev || loading} onClick={()=> prev && load(prev)} className="px-3 py-1 rounded-lg border disabled:opacity-50" aria-label="Geri">Geri</button>
-                        <button disabled={!next || loading} onClick={()=> next && load(next)} className="px-3 py-1 rounded-lg border disabled:opacity-50" aria-label="İleri">İleri</button>
+                        <button
+                            disabled={!prev || loading}
+                            onClick={()=> prev && load(prev)}
+                            className="px-3 py-1 rounded-lg border disabled:opacity-50"
+                            aria-label="Geri"
+                        >Geri</button>
+                        <button
+                            disabled={!next || loading}
+                            onClick={()=> next && load(next)}
+                            className="px-3 py-1 rounded-lg border disabled:opacity-50"
+                            aria-label="İleri"
+                        >İleri</button>
                     </div>
                 </div>
             </div>

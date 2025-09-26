@@ -11,7 +11,7 @@ type NavItem = { href: string; label: string; Icon: LucideIcon };
 const NAV: NavItem[] = [
     { href: '/dashboard/ik/toros', label: 'Dashboard', Icon: LayoutDashboard },
     { href: '/dashboard/ik/toros/approvals', label: 'Onaylar', Icon: CheckCircle2 },
-    { href: '/dashboard/ik/toros/Company', label: 'Firmam', Icon: Building2 },
+    { href: '/dashboard/ik/toros/company', label: 'Firmam', Icon: Building2 },
     { href: '/dashboard/ik/toros/trips', label: 'Seferler', Icon: Bus },
     { href: '/dashboard/ik/toros/customers', label: 'Müşteriler', Icon: Users },
     { href: '/dashboard/ik/toros/personnel', label: 'Personeller', Icon: Users },

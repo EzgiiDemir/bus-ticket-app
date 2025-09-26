@@ -4,70 +4,57 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ef1886e3-1d19-471a-a296-452f827323e0" name="Changes" comment="last update">
-      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/AdminApprovalController.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Company/DashboardController.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/CompanyApprovalController.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Personnel/SeatOverrideController.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Middleware/CompanyApprover.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-backend/app/Models/SeatOverride.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-backend/database/migrations/2025_09_25_052730_create_seat_overrides_table.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-backend/database/migrations/2025_09_25_084319_update_role_requests_schema.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-backend/database/seeders/CompanyAndHrSeeder.php" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/account/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/approvals/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/company/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/customers/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/layout.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/personnel/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/trips/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/account/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/approvals/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/company/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/customers/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/layout.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/personnel/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/trips/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/account/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/approvals/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/company/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/customers/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/layout.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/personnel/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/trips/page.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/app/lib/adminApi.ts" afterDir="false" />
+    <list default="true" id="ef1886e3-1d19-471a-a296-452f827323e0" name="Changes" comment="new updates">
+      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Company/CustomerController.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Company/ExportController.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Company/PersonnelController.php" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Company/TripController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/php.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/php.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/ApprovalController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/ApprovalController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/PeopleController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/PeopleController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/TripAnalyticsController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/TripAnalyticsController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/TripController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Admin/TripController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/AuthController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/AuthController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/OrderController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/OrderController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Personnel/CompanyController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Personnel/CompanyController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Company/DashboardController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/Company/DashboardController.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/PublicProductController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/PublicProductController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-backend/app/Models/RoleRequest.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Models/RoleRequest.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-backend/app/Http/Controllers/SeatHoldController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/app/Http/Controllers/SeatHoldController.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api-backend/bootstrap/app.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/bootstrap/app.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api-backend/routes/api.php" beforeDir="false" afterPath="$PROJECT_DIR$/api-backend/routes/api.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/context/AppProvider.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/context/AppProvider.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/next.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/next.config.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/auth/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/auth/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/approvals/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/approvals/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/companies/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/companies/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/customers/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/personnel/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/admin/trips/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/account/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/account/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/approvals/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/approvals/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/company/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/company/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/customers/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/layout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/layout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/personnel/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/anka/trips/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/account/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/account/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/approvals/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/approvals/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/company/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/company/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/customers/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/layout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/layout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/personnel/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/mavi/trips/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/account/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/account/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/approvals/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/approvals/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/company/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/company/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/customers/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/layout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/layout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/personnel/page.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/ik/toros/trips/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/orders/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/orders/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/passenger/trips/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/customers/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/customers/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/history/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/history/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/orders/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/orders/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/page.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/trips/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/dashboard/personnel/trips/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/lib/export.ts" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/app/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/PurchaseModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/PurchaseModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/app/lib/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/app/lib/api.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -217,9 +204,6 @@
       <path value="$PROJECT_DIR$/api-backend/vendor/sebastian/version" />
       <path value="$PROJECT_DIR$/api-backend/vendor/sebastian/type" />
       <path value="$PROJECT_DIR$/api-backend/vendor/laravel/sanctum" />
-      <path value="$PROJECT_DIR$/api-backend/vendor/psr/cache" />
-      <path value="$PROJECT_DIR$/api-backend/vendor/doctrine/deprecations" />
-      <path value="$PROJECT_DIR$/api-backend/vendor/doctrine/dbal" />
     </include_path>
   </component>
   <component name="ProjectColorInfo">{
@@ -282,7 +266,8 @@
       <workItem from="1758487902733" duration="1120000" />
       <workItem from="1758550985123" duration="12181000" />
       <workItem from="1758605332699" duration="49443000" />
-      <workItem from="1758800011228" duration="4839000" />
+      <workItem from="1758800011228" duration="24572000" />
+      <workItem from="1758888872214" duration="4285000" />
     </task>
     <task id="LOCAL-00001" summary="fronted update">
       <option name="closed" value="true" />
@@ -300,7 +285,15 @@
       <option name="project" value="LOCAL" />
       <updated>1758488255926</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="new updates">
+      <option name="closed" value="true" />
+      <created>1758807119814</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1758807119814</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -320,6 +313,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="fronted update" />
     <MESSAGE value="last update" />
-    <option name="LAST_COMMIT_MESSAGE" value="last update" />
+    <MESSAGE value="new updates" />
+    <option name="LAST_COMMIT_MESSAGE" value="new updates" />
   </component>
 </project>
